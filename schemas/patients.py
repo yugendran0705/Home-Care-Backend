@@ -65,3 +65,10 @@ class PatientResponse(PatientBase):
         Pydantic configuration to allow creating this schema from a SQLAlchemy ORM model.
         """
         from_attributes = True
+
+class PatientCreateResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    patient: PatientResponse
+    class Config:
+        from_attributes = True

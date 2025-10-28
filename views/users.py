@@ -7,8 +7,8 @@ from config.database import get_db
 from utils.roleChecker import RoleChecker
 from services.users import UserService
 import models
-from schemas.token import *
-from schemas.users import *
+from schemas.token import Token, RefreshTokenRequest
+from schemas.users import UserCreate, UserLogin, UserResponse, UserUpdate
 
 # Create API router
 router = APIRouter(
@@ -46,21 +46,23 @@ def register_new_user(
         )
         return created_user
     except ValueError as e:
+        print(f"Value Error in user registration: {e}")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e)
         )
     except Exception as e:
+        print(f"Unexpected Error in user registration: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during registration: {str(e)}"
+            detail=f"An unexpected error occurred during registration."
         )   
 
 @router.post(
     "/login",
     response_model=Token,
     status_code=status.HTTP_200_OK,
-    summary="Register a new patient"
+    summary="User Login"
 )
 def login_user(
     login_data: UserLogin,
@@ -69,24 +71,34 @@ def login_user(
     """
     Handles user login and returns access and refresh tokens
     """
-    response = service.authenticate_user(
-        email=login_data.email,
-        password=login_data.password
-    )
-    
-    if not response:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+    try:
+        response = service.authenticate_user(
+            email=login_data.email,
+            password=login_data.password
         )
-    
-    return Token(access_token= response["access_token"], refresh_token= response["refresh_token"])
+        
+        if not response:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        return Token(access_token= response["access_token"], refresh_token= response["refresh_token"])
+    except HTTPException as e:
+        print(f"HTTP Error during login: {e.detail}")
+        raise e
+    except Exception as e:
+        print(f"Unexpected Error during login: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during login."
+        )
 
 @router.post(
     "/refresh",
     response_model=Token,
     status_code=status.HTTP_200_OK,
-    summary="Refresh access token using a refresh token"
+    summary="Refresh access token"
 )
 def refresh_token(
     refresh_token_in: RefreshTokenRequest,
@@ -99,17 +111,19 @@ def refresh_token(
         new_tokens = service.create_access_token_with_refresh_token(
             refresh_token=refresh_token_in.refresh_token
         )
-        if not new_tokens:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials."
-            )
         return Token(access_token=new_tokens["access_token"], refresh_token=new_tokens["refresh_token"])
     except ValueError as e:
+        print(f"Value Error during token refresh: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        print(f"Unexpected Error during token refresh: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while refreshing the token."
         )
 
 
@@ -121,7 +135,17 @@ def get_my_profile(
     """
     Retrieves the profile of the currently logged-in user.
     """
-    return service.get_user_by_id(user.id)
+    try:
+        return service.get_user_by_id(user.id)
+    except HTTPException as e:
+        print(f"HTTP Error getting own profile: {e.detail}")
+        raise e
+    except Exception as e:
+        print(f"Unexpected Error getting own profile: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while fetching your profile."
+        )
 
 @router.get(
     "/one/{user_id}",
@@ -136,32 +160,51 @@ def get_user_by_id_as_admin(
     """
     Retrieves a user profile by ID, accessible only to Admins.
     """
-    user = service.get_user_by_id(user_id)
-    if not user:
+    try:
+        user = service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        return user
+    except HTTPException as e:
+        print(f"HTTP Error getting user by ID: {e.detail}")
+        raise e
+    except Exception as e:
+        print(f"Unexpected Error getting user by ID: {e}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while fetching the user profile."
         )
-    return user
 
-@router.put("/me", response_model=UserResponse, summary="Update current user's profile")    
+@router.put("/", response_model=UserResponse, summary="Update current user's profile")    
 def update_my_profile(
-    user_update_data: UserResponse,
+    user_update_data: UserUpdate, # Use UserUpdate schema for partial updates
     service: UserService = Depends(get_user_service),
     user: models.User = patient_dependency
 ):
     """
     Updates the profile of the currently logged-in user.
     """
-    updated_user = service.update_user_profile(user.id, user_update_data.model_dump())
-    if not updated_user:
+    try:
+        update_dict = user_update_data.model_dump(exclude_unset=True)
+        if not update_dict:
+            raise HTTPException(status_code=400, detail="No update data provided.")
+        
+        updated_user = service.update_user_profile(user.id, update_dict)
+        return updated_user
+    except HTTPException as e:
+        print(f"HTTP Error updating own profile: {e.detail}")
+        raise e
+    except Exception as e:
+        print(f"Unexpected Error updating own profile: {e}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while updating your profile."
         )
-    return updated_user
 
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT, summary="Deactivate current user's account")
+@router.delete("/", status_code=status.HTTP_204_NO_CONTENT, summary="Deactivate current user's account")
 def deactivate_my_account(
     service: UserService = Depends(get_user_service),
     user: models.User = patient_dependency
@@ -169,5 +212,15 @@ def deactivate_my_account(
     """
     Deactivates the account of the currently logged-in user.
     """
-    service.deactivate_user(user.id)
-    return None
+    try:
+        service.deactivate_user(user.id)
+        return None
+    except HTTPException as e:
+        print(f"HTTP Error deactivating account: {e.detail}")
+        raise e
+    except Exception as e:
+        print(f"Unexpected Error deactivating account: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during account deactivation."
+        )

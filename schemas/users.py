@@ -28,6 +28,13 @@ class UserCreate(BaseModel):
     password: str
     user_type: str
 
-class RefreshTokenRequest(BaseModel):
-    """Schema for refresh token requests."""
-    refresh_token: str
+class UserUpdate(BaseModel):
+    """Schema for updating user information."""
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+    user_type: Optional[str] = None
+    is_active: Optional[bool] = None
+    last_login_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

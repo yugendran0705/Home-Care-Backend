@@ -1,0 +1,74 @@
+# /schemas/nurse.py
+
+import uuid
+from datetime import date
+from typing import Optional, List
+from decimal import Decimal
+
+from pydantic import BaseModel, EmailStr, Field
+
+# Import other schemas for nesting
+from .users import UserResponse
+from .address import AddressCreate, Address as AddressResponse
+
+
+class NurseBase(BaseModel):
+    """
+    Base schema for a nurse's profile, containing shared fields.
+    """
+    first_name: str = Field(..., max_length=100, examples=["Priya"])
+    last_name: str = Field(..., max_length=100, examples=["Sharma"])
+    phone_number: str = Field(..., max_length=20, examples=["9988776655"])
+    date_of_birth: Optional[date] = Field(None, examples=["1992-11-15"])
+    gender: Optional[str] = Field(None, max_length=10, examples=["Female"])
+    license_number: str = Field(..., max_length=50, examples=["TNMC-12345"])
+    years_of_experience: int = Field(..., ge=0, examples=[5])
+    bio: Optional[str] = Field(None, examples=["Experienced pediatric nurse."])
+    profile_picture_url: str = Field(..., examples=["https://example.com/profile.jpg"])
+
+
+class NurseCreate(NurseBase):
+    """
+    Schema for registering a new nurse. Includes user account credentials
+    and an optional address.
+    """
+    email: EmailStr = Field(..., examples=["priya.sharma@example.com"])
+    password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
+    address: Optional[AddressCreate] = None
+
+
+class NurseUpdate(BaseModel):
+    """
+    Schema for updating a nurse's profile. All fields are optional
+    to allow for partial updates.
+    """
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
+    phone_number: Optional[str] = Field(None, max_length=20)
+    date_of_birth: Optional[date] = None
+    gender: Optional[str] = Field(None, max_length=10)
+    years_of_experience: Optional[int] = Field(None, ge=0)
+    bio: Optional[str] = None
+    profile_picture_url: Optional[str] = None
+
+
+class NurseResponse(NurseBase):
+    """
+    Schema for returning a nurse's profile from the API.
+    Includes nested user and address information.
+    """
+    id: uuid.UUID
+    is_verified: bool
+    average_rating: Decimal
+    user: UserResponse
+    primary_address: Optional[AddressResponse] = None
+
+    class Config:
+        from_attributes = True
+
+class NurseCreateResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    nurse: NurseResponse
+    class Config:
+        from_attributes = True

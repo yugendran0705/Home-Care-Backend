@@ -52,8 +52,10 @@ class Nurse(Base):
     license_number = Column(String(50), unique=True, nullable=False)
     years_of_experience = Column(Integer, nullable=False, default=0)
     bio = Column(Text, nullable=True) # Nullable
-    profile_picture_url = Column(String(255), nullable=True) # Nullable
+    profile_picture_url = Column(String(255), nullable=False)
     is_verified = Column(Boolean, nullable=False, default=False)
+    is_qualified = Column(Boolean, nullable=True, default=False)
+    is_active = Column(Boolean, nullable=True, default=True)
     average_rating = Column(Numeric(3, 2), nullable=False, default=0.00) # DECIMAL(3,2) mapped to Numeric
     address_id = Column(UUID(as_uuid=True), ForeignKey("addresses.address_id"), nullable=True) # Nullable
 
@@ -64,6 +66,7 @@ class Nurse(Base):
     availability = relationship("Availability", back_populates="nurse")
     bookings = relationship("Booking", back_populates="nurse")
     reviews = relationship("Review", back_populates="nurse")
+    documents = relationship("NurseDocument", back_populates="nurse")
 
 class Address(Base):
     __tablename__ = "addresses"
@@ -90,8 +93,10 @@ class Service(Base):
     service_name = Column(String(100), unique=True, nullable=False)
     description = Column(Text, nullable=True) # Nullable
     base_price = Column(Numeric(10, 2), nullable=False, default=0.00) # DECIMAL(10,2) mapped to Numeric
-    duration_minutes = Column(Integer, nullable=True) # Nullable
+    duration = Column(Integer, nullable=True) # Nullable
+    duration_type = Column(String(20), nullable=True, comment='ENUM: Minutes, Hours, Days') # Nullable
     is_active = Column(Boolean, nullable=False, default=True)
+    is_qualified = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     nurse_services = relationship("NurseService", back_populates="service")
@@ -172,3 +177,16 @@ class Payment(Base):
     # Relationships
     booking = relationship("Booking", back_populates="payment")
     patient = relationship("Patient", back_populates="payments")
+
+class NurseDocument(Base):
+    __tablename__ = "nurse_documents"
+    id = Column("document_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), nullable=False)
+    document_type = Column(String(50), nullable=False, comment="ENUM: Aadhar, PAN, NursingLicense, Other")
+    document_url = Column(String(255), nullable=False, comment="URL to the stored document (e.g., in an S3 bucket)")
+    verification_status = Column(String(20), nullable=False, default='Pending', comment="ENUM: Pending, Approved, Rejected")
+    notes = Column(Text, nullable=True, comment="Optional notes from an admin regarding verification")
+    uploaded_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+
+    nurse = relationship("Nurse", back_populates="documents")

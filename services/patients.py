@@ -13,6 +13,7 @@ from repositories.address import AddressRepository
 from .users import UserService
 from .address import AddressService
 from schemas.address import AddressCreate
+from config.security import create_access_token, create_refresh_token
 
 
 class PatientService:
@@ -29,8 +30,8 @@ class PatientService:
         self.db = db
         self.patient_repo = PatientRepository(db)
         self.user_service = UserService(db)
-        # The AddressService requires an AddressRepository, so we instantiate it here
-        self.address_service = AddressService(AddressRepository(db))
+        # The AddressService is initialized with the same db session
+        self.address_service = AddressService(db)
 
     def create_patient_and_user_account(
         self,
@@ -100,7 +101,17 @@ class PatientService:
                 )
             
             self.db.refresh(new_patient)
-            return new_patient
+            token_data = {
+                "id": str(new_user.id)
+            }
+            
+            access_token = create_access_token(data=token_data)
+            refresh_token = create_refresh_token(data=token_data)
+            return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "patient": new_patient
+            }
 
         except ValueError as e:
             # This catches the "Email already registered" error from UserService

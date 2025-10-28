@@ -9,3 +9,10 @@ class Token(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+class RefreshTokenRequest(BaseModel):
+    """Schema for refresh token requests."""
+    refresh_token: str
+
+    class Config:
+        from_attributes = True

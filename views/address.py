@@ -46,8 +46,10 @@ def create_address_for_user(
             user_id=current_user.id
         )
     except ValueError as e:
+        print(f"Error creating address for user {current_user.id}: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
+        print(f"An unexpected error occurred while creating address: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
@@ -66,7 +68,16 @@ def get_my_addresses(
     """
     Retrieves all addresses associated with the currently authenticated user.
     """
-    return service.get_addresses_for_user(user_id=current_user.id)
+    try:
+        return service.get_addresses_for_user(user_id=current_user.id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Error fetching addresses for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while fetching addresses."
+        )
 
 
 @router.get(
@@ -82,13 +93,22 @@ def get_address_by_id(
     """
     Retrieves a specific address by its ID, ensuring it belongs to the authenticated user.
     """
-    db_address = service.get_address_by_id(address_id=address_id)
-    if not db_address or db_address.user_id != current_user.id:
+    try:
+        db_address = service.get_address_by_id(address_id=address_id)
+        if not db_address or db_address.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Address not found or not authorized to view this address."
+            )
+        return db_address
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Error fetching address {address_id} for user {current_user.id}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Address not found or not authorized to view this address."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while fetching address."
         )
-    return db_address
 
 
 @router.put(
@@ -113,8 +133,10 @@ def update_address(
         )
         return updated_address
     except ValueError as e:
+        print(f"Error updating address {address_id} for user {current_user.id}: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
+        print(f"An unexpected error occurred while updating address: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
@@ -169,8 +191,10 @@ def set_primary_address(
         )
         return updated_address
     except ValueError as e:
+        print(f"Error setting primary address {address_id} for user {current_user.id}: {e}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
+        print(f"An unexpected error occurred while setting primary address: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"

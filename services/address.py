@@ -1,0 +1,108 @@
+# /services/address.py
+
+import uuid
+from typing import List, Optional, Dict, Any
+
+from repositories.address import AddressRepository
+from repositories.patients import PatientRepository
+from schemas.address import AddressCreate, AddressUpdate
+from models import Address as AddressModel
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+
+
+class AddressService:
+    """
+    Service layer for handling address-related business logic.
+    """
+
+    def __init__(self, db: Session):
+        """
+        Initializes the service with a database session and a repository instance.
+        """
+        self.address_repo = AddressRepository(db)
+        self.db = db
+        self.patient_repo = PatientRepository(db)
+
+    def create_address_for_user(self, address_in: AddressCreate, user_id: uuid.UUID) -> AddressModel:
+        """
+        Creates a new address and associates it with a user.
+        """
+        address_data = address_in.model_dump()
+        address_data["user_id"] = user_id
+        
+        try:
+            return self.address_repo.create(address_data=address_data)
+        except IntegrityError:
+            raise ValueError("An integrity error occurred while creating the address.")
+
+    def get_address_by_id(self, address_id: uuid.UUID) -> Optional[AddressModel]:
+        """
+        Retrieves a single address by its ID.
+        """
+        return self.address_repo.get_by_id(address_id=address_id)
+
+    def get_addresses_for_user(self, user_id: uuid.UUID) -> List[AddressModel]:
+        """
+        Retrieves all addresses associated with a specific user.
+        """
+        return self.address_repo.get_by_user_id(user_id=user_id)
+
+    def update_address(
+        self, address_id: uuid.UUID, address_in: AddressUpdate, user_id: uuid.UUID
+    ) -> AddressModel:
+        """
+        Updates an address's details and handles the 'is_primary' business logic.
+        """
+        db_address = self.get_address_by_id(address_id=address_id)
+        if not db_address or db_address.user_id != user_id:
+             raise ValueError("Address not found or not authorized to update.")
+
+        update_data = address_in.model_dump(exclude_unset=True)
+
+        if update_data.get("is_primary") is True:
+            self.address_repo.deactivate_all_primary_addresses_for_user(user_id)
+
+        updated_address = self.address_repo.update(
+            address=db_address,
+            updates=update_data
+        )
+
+        return updated_address
+
+    def delete_address(self, address_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        """
+        Deletes an address, with business logic to prevent deleting a primary address.
+        """
+        db_address = self.get_address_by_id(address_id=address_id)
+        if not db_address or db_address.user_id != user_id:
+            raise ValueError("Address not found or not authorized to delete.")
+            
+        if db_address.is_primary:
+            raise ValueError("Cannot delete a primary address. Please set another as primary first.")
+
+        return self.address_repo.delete(address=db_address)
+    
+    def update_primary_address(self, user_id: uuid.UUID, address_id: uuid.UUID) -> AddressModel:
+        """
+        Updates the primary address for a user, ensuring only one address can be primary.
+        """
+        db_address = self.get_address_by_id(address_id=address_id)
+        if not db_address or db_address.user_id != user_id:
+            raise ValueError("Address not found or not authorized to update.")
+
+        self.address_repo.deactivate_all_primary_addresses_for_user(user_id)
+        
+        updated_address = self.address_repo.update(
+            address=db_address,
+            updates={"is_primary": True}
+        )
+
+        patient = self.patient_repo.get_by_id(patient_id=user_id)
+        if patient:
+            self.patient_repo.update(
+                patient=patient,
+                updates={"address_id": updated_address.id}
+            )
+
+        return updated_address

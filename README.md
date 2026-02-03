@@ -1,6 +1,6 @@
-# Nestora Backend
+# Home-Care Backend
 
-This is the backend service for Nestora, a comprehensive rental and PG (Paying Guest) management application. It is built using Python with the [FastAPI](https://fastapi.tiangolo.com/) framework, [SQLAlchemy](https://www.sqlalchemy.org/) for ORM, and [Alembic](https://alembic.sqlalchemy.org/) for database migrations.
+It is built using Python with the [FastAPI](https://fastapi.tiangolo.com/) framework, [SQLAlchemy](https://www.sqlalchemy.org/) for ORM, and [Alembic](https://alembic.sqlalchemy.org/) for database migrations.
 
 ## Prerequisites
 
@@ -83,3 +83,4 @@ FastAPI provides automatic interactive API documentation. Once the server is run
 
 - **Swagger UI**: http://127.0.0.1:8000/docs
 - **ReDoc**: http://127.0.0.1:8000/redoc
+- https://api.postman.com/collections/26433342-4b48923a-e40b-41dd-a649-aa3fb3e77e2b?access_key=PMAT-01KGJ6P9BMGZW0NBMNB61DES39

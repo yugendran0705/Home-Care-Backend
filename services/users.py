@@ -121,7 +121,7 @@ class UserService:
             if existing_user:
                 raise ValueError("New email is already in use.")
         
-        return self.user_repo.update_user(user, updates)
+        return self.user_repo.update_user(user.id, updates)
 
     def deactivate_user(self, user_id: uuid.UUID) -> bool:
         """
@@ -132,7 +132,7 @@ class UserService:
             return False
         
         updates = {"is_active": False}
-        self.user_repo.update_user(user, updates)
+        self.user_repo.update_user(user.id, updates)
         return True
     
     def create_access_token_with_refresh_token(self, refresh_token: str) -> Optional[Dict[str, str]]:

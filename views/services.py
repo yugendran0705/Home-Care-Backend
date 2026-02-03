@@ -49,12 +49,12 @@ def create_new_service(
     "/all",
     response_model=List[ServiceResponse],
     summary="List all available services",
+    status_code=status.HTTP_200_OK
 )
 def list_all_services(
     skip: int = 0,
     limit: int = 100,
     service: ServiceService = Depends(get_service_service),
-    status_code=status.HTTP_200_OK
 ):
     """
     Retrieves a paginated list of all services.

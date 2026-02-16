@@ -72,7 +72,7 @@ This project uses Alembic to manage database schema changes.
 To start the development server, run the following command from the root directory (assuming your main FastAPI app instance is in `main.py`):
 
 ```bash
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 The server will start on `http://127.0.0.1:8000`. The `--reload` flag enables hot-reloading, so the server will restart automatically on code changes.

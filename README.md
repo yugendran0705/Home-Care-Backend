@@ -111,10 +111,10 @@ Create a new branch from `main` for each ticket. The branch name should be in th
 
 Please use the following format for your commit messages:
 
-`{Ticket number}-{Ticket description} {what you have solved}`
+`{Type of ticket}: {Ticket number}-{what you have solved}`
 
 **Example:**
 
-`123-add_new_profile_screen Implemented the new profile screen UI`
+`feature: 123 Implemented the new profile screen UI`
 
 - https://api.postman.com/collections/26433342-4b48923a-e40b-41dd-a649-aa3fb3e77e2b?access_key=PMAT-01KGJ6P9BMGZW0NBMNB61DES39

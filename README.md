@@ -83,4 +83,38 @@ FastAPI provides automatic interactive API documentation. Once the server is run
 
 - **Swagger UI**: http://127.0.0.1:8000/docs
 - **ReDoc**: http://127.0.0.1:8000/redoc
+
+## Contributing
+
+When working on a ticket, please follow this branching strategy.
+
+### Branching Strategy
+
+Create a new branch from `main` for each ticket. The branch name should be in the following format:
+
+`{Type of ticket}/{Ticket number}-{Small_description_with_underscores}`
+
+**Types of tickets:**
+
+- `feature`: For new features.
+- `bugfix`: For bug fixes.
+- `chore`: for routine tasks, maintenance, or refactoring.
+- and more as needed.
+
+**Example:**
+
+`feature/123-add_new_profile_screen`
+`bugfix/456-fix_login_issue`
+`chore/789-update_dependencies`
+
+### Commit Messages
+
+Please use the following format for your commit messages:
+
+`{Ticket number}-{Ticket description} {what you have solved}`
+
+**Example:**
+
+`123-add_new_profile_screen Implemented the new profile screen UI`
+
 - https://api.postman.com/collections/26433342-4b48923a-e40b-41dd-a649-aa3fb3e77e2b?access_key=PMAT-01KGJ6P9BMGZW0NBMNB61DES39

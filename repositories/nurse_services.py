@@ -2,6 +2,7 @@
 
 import uuid
 from typing import List, Optional, Dict, Any
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
@@ -107,3 +108,28 @@ class NurseServiceRepository:
         self.db.delete(db_nurse_service)
         self.db.commit()
         return True
+
+    def update_price(self, *, nurse_id: uuid.UUID, service_id: uuid.UUID, new_price: Decimal) -> Optional[models.NurseService]:
+        """
+        Updates the price for an existing nurse-service link.
+
+        Args:
+            nurse_id (uuid.UUID): The nurse's ID.
+            service_id (uuid.UUID): The service's ID.
+            new_price (Decimal): The new price to set.
+
+        Returns:
+            Optional[models.NurseService]: The updated NurseService object, or None if not found.
+        """
+        db_nurse_service = self.get_specific_nurse_service(
+            nurse_id=nurse_id, service_id=service_id
+        )
+        
+        if not db_nurse_service:
+            return None
+            
+        db_nurse_service.price = new_price
+        self.db.add(db_nurse_service)
+        self.db.commit()
+        self.db.refresh(db_nurse_service)
+        return db_nurse_service

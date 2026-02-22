@@ -57,7 +57,7 @@ class AddressUpdate(BaseModel):
     is_primary: Optional[bool] = None
 
 
-class Address(AddressBase):
+class AddressResponse(AddressBase):
     """
     Schema for returning an address from the API.
     This includes database-generated fields like `id`.

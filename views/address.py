@@ -9,7 +9,7 @@ from config.database import get_db
 from utils.roleChecker import RoleChecker
 from services.address import AddressService
 import models
-from schemas.address import AddressCreate, AddressUpdate, Address
+from schemas.address import AddressCreate, AddressUpdate, AddressResponse
 
 # Create API router
 router = APIRouter(
@@ -28,7 +28,7 @@ admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 
 @router.post(
     "/",
-    response_model=Address,
+    response_model=AddressResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new address for the current user"
 )
@@ -58,7 +58,7 @@ def create_address_for_user(
 
 @router.get(
     "/me",
-    response_model=List[Address],
+    response_model=List[AddressResponse],
     summary="Get all addresses for the current user"
 )
 def get_my_addresses(
@@ -82,7 +82,7 @@ def get_my_addresses(
 
 @router.get(
     "/one/{address_id}",
-    response_model=Address,
+    response_model=AddressResponse,
     summary="Get a specific address by ID (User-restricted)",
 )
 def get_address_by_id(
@@ -113,7 +113,7 @@ def get_address_by_id(
 
 @router.put(
     "/{address_id}",
-    response_model=Address,
+    response_model=AddressResponse,
     summary="Update an existing address",
 )
 def update_address(
@@ -173,7 +173,7 @@ def delete_address(
 
 @router.patch(
     "/set_primary/{address_id}",
-    response_model=Address,
+    response_model=AddressResponse,
     summary="Set an address as the primary address for the current user",
 )
 def set_primary_address(

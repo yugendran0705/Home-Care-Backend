@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 # Import other schemas for nesting
 from .users import UserResponse
-from .address import AddressCreate, Address as AddressResponse
+from .address import AddressCreate, AddressResponse
 
 
 class NurseBase(BaseModel):

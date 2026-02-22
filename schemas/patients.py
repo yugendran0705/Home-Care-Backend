@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
 # Import other schemas for nesting in responses and requests
-from .address import AddressCreate, Address as AddressResponse
+from .address import AddressCreate, AddressResponse
 from .users import UserResponse  # Assumes a UserResponse schema is in schemas/user.py
 
 

@@ -28,38 +28,42 @@ admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 
 
 @router.post(
-    "/{nurse_id}/services",
-    response_model=NurseServiceResponse,
+    "/services",
+    response_model=List[NurseServiceResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Assign a service to a nurse",
-    dependencies=[nurse_dependency]
+    summary="Assign services to current nurse"
 )
 async def assign_service_to_nurse(
-    nurse_id: uuid.UUID,
-    service_in: NurseServiceCreate,
+    service_in: List[NurseServiceCreate],
+    current_user: models.User = nurse_dependency,
     service: NurseServiceService = Depends(get_nurse_service_service)
 ):
     """
-    Assigns a service to a nurse with an optional custom price.
-    Only nurses and admins can perform this action.
+    Assigns multiple services to the currently authenticated nurse with optional custom prices.
+    Only nurses can assign services to themselves, admins can assign to any nurse.
     """
-    # Ensure the nurse_id in the path matches the one in the body
-    if service_in.nurse_id != nurse_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nurse ID in path must match nurse ID in request body."
-        )
+    
+    created_associations = []
 
-    try:
-        created_association = service.assign_service_to_nurse(nurse_service_in=service_in)
-        return NurseServiceResponse.model_validate(created_association)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
-        )
+    for item in service_in:
+        try:
+            # Call service with current_user for validation
+            new_assoc = service.assign_service_to_nurse(
+                nurse_service_in=item,
+                current_user_id=current_user.id
+            )
+            created_associations.append(new_assoc)
+
+        except HTTPException as e:
+            # propagate known HTTP errors
+            raise e
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred: {str(e)}"
+            )
+
+    return [NurseServiceResponse.model_validate(assoc) for assoc in created_associations]
 
 
 @router.get(
@@ -119,23 +123,25 @@ async def update_nurse_service_price(
 
 
 @router.delete(
-    "/{nurse_id}/services/{service_id}",
+    "/{nurse_id}/services",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Remove a service from a nurse's profile",
-    dependencies=[nurse_dependency]
+    summary="Remove all services from a nurse's profile"
 )
 async def remove_service_from_nurse(
     nurse_id: uuid.UUID,
-    service_id: uuid.UUID,
+    current_user: models.User = nurse_dependency,
     service: NurseServiceService = Depends(get_nurse_service_service)
 ):
     """
-    Removes a service from a nurse's profile.
-    Only nurses and admins can perform this action.
+    Removes all services from a specific nurse's profile.
+    Only nurses can remove their own services, admins can remove from any nurse.
     """
     try:
-        service.remove_service_from_nurse(nurse_id=nurse_id, service_id=service_id)
-        return {"detail": "Service removed from nurse successfully."}
+        count = service.remove_service_from_nurse(
+            nurse_id=nurse_id,
+            current_user_id=current_user.id
+        )
+        return {"detail": f"Successfully removed {count} service(s) from nurse."}
     except HTTPException as e:
         raise e
     except Exception as e:

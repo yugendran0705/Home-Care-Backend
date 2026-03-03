@@ -89,7 +89,7 @@ class NurseServiceRepository:
 
     def remove_service_from_nurse(self, *, nurse_id: uuid.UUID, service_id: uuid.UUID) -> bool:
         """
-        Removes a service link from a nurse.
+        Removes a specific service link from a nurse.
 
         Args:
             nurse_id (uuid.UUID): The nurse's ID.
@@ -108,6 +108,26 @@ class NurseServiceRepository:
         self.db.delete(db_nurse_service)
         self.db.commit()
         return True
+
+    def remove_all_services_from_nurse(self, *, nurse_id: uuid.UUID) -> int:
+        """
+        Removes all service links for a given nurse.
+
+        Args:
+            nurse_id (uuid.UUID): The nurse's ID.
+
+        Returns:
+            int: The number of services removed.
+        """
+        statement = select(models.NurseService).where(models.NurseService.nurse_id == nurse_id)
+        nurse_services = self.db.execute(statement).scalars().all()
+        
+        count = len(nurse_services)
+        for service in nurse_services:
+            self.db.delete(service)
+        
+        self.db.commit()
+        return count
 
     def update_price(self, *, nurse_id: uuid.UUID, service_id: uuid.UUID, new_price: Decimal) -> Optional[models.NurseService]:
         """
@@ -133,3 +153,44 @@ class NurseServiceRepository:
         self.db.commit()
         self.db.refresh(db_nurse_service)
         return db_nurse_service
+
+    def bulk_create(self, *, nurse_services_list: List[NurseServiceCreate]) -> List[models.NurseService]:
+        """
+        Bulk creates multiple nurse-service associations in a single transaction.
+
+        Args:
+            nurse_services_list (List[NurseServiceCreate]): A list of NurseServiceCreate objects.
+
+        Returns:
+            List[models.NurseService]: A list of the newly created NurseService associations.
+        """
+        if not nurse_services_list:
+            return []
+
+        # Validate referenced service_ids exist to avoid FK errors
+        service_ids = {svc.service_id for svc in nurse_services_list}
+        if service_ids:
+            stmt = select(models.Service.id).where(models.Service.id.in_(service_ids))
+            existing = set(self.db.execute(stmt).scalars().all())
+            missing = service_ids - existing
+            if missing:
+                raise ValueError(f"Service(s) with id(s) {missing} not found.")
+
+        # Create NurseService objects using only the schema data (no relationship loading)
+        db_nurse_services = []
+        for service in nurse_services_list:
+            # Create the object using only the column values, not relationships
+            db_nurse_service = models.NurseService(
+                nurse_id=service.nurse_id,
+                service_id=service.service_id,
+                price=service.price
+            )
+            db_nurse_services.append(db_nurse_service)
+        
+        self.db.add_all(db_nurse_services)
+        self.db.commit()
+        
+        for service in db_nurse_services:
+            self.db.refresh(service)
+        
+        return db_nurse_services

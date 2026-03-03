@@ -10,12 +10,15 @@ from sqlalchemy.orm import Session
 
 # Import necessary components
 from repositories.nurses import NurseRepository
+from repositories.nurse_services import NurseServiceRepository
 from repositories.address import AddressRepository
 from repositories.nurse_documents import NurseDocumentRepository # Import the new repository
+from repositories.services import ServiceRepository  # <- for validating service IDs during registration
 from services.users import UserService
 from services.address import AddressService
 import models
 from schemas.nurses import NurseCreate
+from schemas.nurse_services import NurseServiceCreate
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from config.security import create_access_token, create_refresh_token
@@ -35,6 +38,8 @@ class NurseService:
         self.user_service = UserService(db)
         self.address_service = AddressService(db)
         self.doc_repo = NurseDocumentRepository(db) # Initialize the document repository
+        self.nurse_service_repo = NurseServiceRepository(db)
+        self.service_repo = ServiceRepository(db)  # used for service existence checks
 
     def create_nurse_and_user_account(
         self,
@@ -43,11 +48,25 @@ class NurseService:
         """
         Handles the initial registration of a new nurse.
         Creates the user and profile with a default unverified status.
+        Also links any services provided during registration.
         """
-        nurse_data_dict = nurse_in.model_dump(exclude={"password", "email", "address"})
+        nurse_data_dict = nurse_in.model_dump(exclude={"password", "email", "address", "services"})
         address_data = nurse_in.address
+        services_data = nurse_in.services
 
         try:
+            # Step 0: Validate any provided services IDs before doing any writes.
+            if services_data:
+                for service in services_data:
+                    service_id_raw = service.get("service_id")
+                    try:
+                        service_id = uuid.UUID(str(service_id_raw))
+                    except Exception:
+                        raise ValueError(f"Invalid service_id format: {service_id_raw}")
+
+                    if not self.service_repo.get_by_id(service_id=service_id):
+                        raise ValueError(f"Service with ID {service_id} not found.")
+
             # Step 1: Check for existing license number or email
             if self.nurse_repo.get_by_license_number(license_number=nurse_in.license_number):
                 raise ValueError(f"License number '{nurse_in.license_number}' is already registered.")
@@ -79,6 +98,32 @@ class NurseService:
                     updates={"address_id": new_address.id}
                 )
             
+            # Step 5 (Optional): Bulk create and link services
+            if services_data:
+                # build schema list while validating that each referenced service actually exists
+                nurse_service_schemas = []
+                for service in services_data:
+                    service_id_raw = service.get("service_id")
+                    try:
+                        service_id = uuid.UUID(str(service_id_raw))
+                    except Exception:
+                        raise ValueError(f"Invalid service_id format: {service_id_raw}")
+
+                    # check existence up‑front to avoid DBFK error later
+                    if not self.service_repo.get_by_id(service_id=service_id):
+                        raise ValueError(f"Service with ID {service_id} not found.")
+
+                    nurse_service_schemas.append(
+                        NurseServiceCreate(
+                            nurse_id=new_nurse.id,
+                            service_id=service_id,
+                            price=service.get("price")
+                        )
+                    )
+
+                # use bulk insert after validation
+                self.nurse_service_repo.bulk_create(nurse_services_list=nurse_service_schemas)
+            
             self.db.refresh(new_nurse)
             token_data = {
                 "id": str(new_user.id)
@@ -93,8 +138,13 @@ class NurseService:
             }
 
         except ValueError as e:
+            # rollback on any validation failure
             self.db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+            err_msg = str(e)
+            # if the error was about a missing resource, map to 404
+            if "not found" in err_msg.lower():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err_msg)
         except Exception as e:
             self.db.rollback()
             raise HTTPException(

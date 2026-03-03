@@ -150,20 +150,29 @@ class NurseServiceService:
             )
         return updated
 
-    def remove_service_from_nurse(self, nurse_id: uuid.UUID, service_id: uuid.UUID) -> bool:
+    def remove_service_from_nurse(self, nurse_id: uuid.UUID, current_user_id: uuid.UUID) -> int:
         """
-        Removes a service from a nurse's profile.
-
+        Removes all services from a nurse's profile.
+        
         Args:
             nurse_id (uuid.UUID): The nurse's ID.
-            service_id (uuid.UUID): The service's ID.
+            current_user_id (uuid.UUID): The ID of the currently authenticated user.
 
         Returns:
-            bool: True if removed successfully.
+            int: The number of services removed.
 
         Raises:
             HTTPException: If validation fails.
         """
+        # Validate that current user is the nurse or is an admin
+        current_user = self.nurse_repo.db.query(models.User).filter(models.User.id == current_user_id).first()
+        if current_user and current_user.user_type == "Nurse" and nurse_id != current_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Nurses can only remove their own services."
+            )
+        # Admins can remove services from any nurse
+
         # Validate that nurse exists
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
         if not nurse:
@@ -172,31 +181,14 @@ class NurseServiceService:
                 detail=f"Nurse with ID {nurse_id} not found."
             )
 
-        # Validate that service exists
-        service = self.service_repo.get_by_id(service_id=service_id)
-        if not service:
+        # Check if nurse has any services
+        nurse_services = self.nurse_service_repo.get_services_for_nurse(nurse_id=nurse_id)
+        if not nurse_services:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Service with ID {service_id} not found."
+                detail=f"Nurse {nurse_id} has no services to remove."
             )
 
-        # Check if the association exists
-        existing = self.nurse_service_repo.get_specific_nurse_service(
-            nurse_id=nurse_id, service_id=service_id
-        )
-        if not existing:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Service {service_id} is not assigned to nurse {nurse_id}."
-            )
-
-        # Remove the association
-        success = self.nurse_service_repo.remove_service_from_nurse(
-            nurse_id=nurse_id, service_id=service_id
-        )
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to remove service from nurse."
-            )
-        return success
+        # Remove all services
+        count = self.nurse_service_repo.remove_all_services_from_nurse(nurse_id=nurse_id)
+        return count

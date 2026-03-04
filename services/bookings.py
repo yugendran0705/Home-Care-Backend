@@ -86,7 +86,7 @@ class BookingService:
         else:
             return updated_booking
 
-    def get_booking_by_id(self, *, booking_id) -> Optional[models.Booking]:
+    def get_booking_by_id(self, *, booking_id: uuid.UUID) -> Optional[models.Booking]:
         """
         Retrieves a single booking by its ID.
         """
@@ -100,3 +100,7 @@ class BookingService:
         """
         bookings = self.booking_repo.list_all(skip=skip, limit=limit)
         return bookings
+
+    def delete_booking(self, *, booking_id: uuid.UUID) -> Optional[models.Booking]:
+        """Deletes a booking by its ID"""
+        deleted_booking = self.booking_repo.delete(booking_id=booking_id)

@@ -200,3 +200,60 @@ def cancel_booking(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Uexpected error in changing booking status",
         )
+
+
+@router.delete(
+    "/{booking_id}",
+    response_model=BookingResponse,
+    summary="Deletes a booking(Admin Access)",
+    dependencies=[admin_dependency],
+)
+def delete_booking(
+    booking_id: uuid.UUID, service: BookingService = Depends(get_bookings_service)
+):
+    deleted_booking = service.delete_booking(booking_id=booking_id)
+    if not deleted_booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found"
+        )
+    return deleted_booking
+
+
+@router.path(
+    "/completed", response_model=BookingResponse, summary="Marks a booking as completed"
+)
+def complete_booking(
+    booking_id: uuid.UUID,
+    service: BookingService = Depends(get_bookings_service),
+    current_user: models.User = nurse_dependency,
+):
+    """Marks a booking as completed by changing its status to 'Completed'. Only the nurse associated with the booking can mark it as completed, and the booking must be in 'Confirmed' status."""
+    current_booking = service.get_booking_by_id(booking_id=booking_id)
+    try:
+        if not current_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found"
+            )
+        if current_booking.nurse_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User not authorized to change this booking's status",
+            )
+        if current_booking.booking_status != "Confirmed":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Booking cannot be marked as completed as it is not in confirmed status",
+            )
+        updates = BookingUpdate(booking_status="Completed")
+        updated_booking = service.update_booking(
+            booking_id=current_booking.id, booking_in=updates
+        )
+        return updated_booking
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Error changing booking status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occured while changing booking status",
+        )

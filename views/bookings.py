@@ -30,6 +30,9 @@ def create_new_booking(
     service: BookingService = Depends(get_bookings_service),
     current_user: models.User = patient_dependency,
 ):
+    """
+    Handles the creation of a new booking and associates it with the respective nurse and patient.
+    """
     try:
         new_booking = service.create_booking(booking_in=booking_in)
     except Exception as e:
@@ -48,6 +51,7 @@ def get_bookings_for_patient(
     service: BookingService = Depends(get_bookings_service),
     current_user: models.User = patient_dependency,
 ):
+    """Retrieves all the bookings associted with the authenticated patient"""
     try:
         return service.get_bookings_for_patient(patient_id=current_user.id)
     except Exception as e:
@@ -67,6 +71,7 @@ def get_bookings_for_nurse(
     service: BookingService = Depends(get_bookings_service),
     current_user: models.User = nurse_dependency,
 ):
+    """Retrieves all the bookings associted with the authenticated nurse"""
     try:
         return service.get_bookings_for_nurse(nurse_id=current_user.id)
     except Exception as e:
@@ -88,7 +93,10 @@ def update_booking(
     booking_update_data: BookingUpdateAdmin,
     service: BookingService = Depends(get_bookings_service),
 ):
-    """what schrema to use??"""
+    """
+    Updates the details of an existing booking.
+    Requires 'Admin' role.
+    """
     updated_booking = service.update_booking_admin(
         booking_id=booking_id, booking_in=booking_update_data
     )
@@ -110,6 +118,7 @@ def get_all_bookings(
     limit: int = 100,
     service: BookingService = Depends(get_bookings_service),
 ):
+    """Retrieves all the bookings with pagination. Requires 'Admin' role."""
     bookings = service.get_all_bookings(skip=skip, limit=limit)
     return bookings
 
@@ -120,6 +129,7 @@ def confirm_booking(
     service: BookingService = Depends(get_bookings_service),
     current_user: models.User = nurse_dependency,
 ):
+    """Confirms a booking by changing its status to 'Confirmed'. Only the nurse associated with the booking can confirm it, and the booking must be in 'Pending' status."""
     current_booking = service.get_booking_by_id(booking_id=booking_id)
     try:
         if not current_booking:
@@ -134,7 +144,7 @@ def confirm_booking(
         if current_booking.booking_status != "Pending":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Booking cannot be confirmed as it is already cancelled/onfirmed/completed",
+                detail="Booking cannot be confirmed as it is already cancelled/confirmed/completed",
             )
         updates = BookingUpdate(booking_status="Confirmed")
         updated_booking = service.update_booking(
@@ -157,7 +167,7 @@ def cancel_booking(
     service: BookingService = Depends(get_bookings_service),
     current_user: models.User = user_dependency,
 ):
-
+    """Cancels a booking by changing its status to 'Cancelled'. Both the nurse and patient associated with the booking can cancel it, and the booking must be in 'Pending' or 'Confirmed' status."""
     current_booking = service.get_booking_by_id(booking_id=booking_id)
     allowed_to_change = ["Pending", "Confirmed"]
     try:

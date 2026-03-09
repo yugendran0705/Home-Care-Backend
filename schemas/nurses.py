@@ -35,9 +35,9 @@ class NurseCreate(NurseBase):
     email: EmailStr = Field(..., examples=["priya.sharma@example.com"])
     password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
     address: Optional[AddressCreate] = None
-    services: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="List of services with service_id and optional price",
+    services: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Optional list of services with service_id and optional price",
         examples=[[{"service_id": "550e8400-e29b-41d4-a716-446655440000", "price": 650.00}]]
     )
     

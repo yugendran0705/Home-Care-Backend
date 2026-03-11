@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import date
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from decimal import Decimal
 
 from pydantic import BaseModel, EmailStr, Field
@@ -29,12 +29,18 @@ class NurseBase(BaseModel):
 
 class NurseCreate(NurseBase):
     """
-    Schema for registering a new nurse. Includes user account credentials
-    and an optional address.
+    Schema for registering a new nurse. Includes user account credentials,
+    an optional address, and optional services.
     """
     email: EmailStr = Field(..., examples=["priya.sharma@example.com"])
     password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
     address: Optional[AddressCreate] = None
+    services: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Optional list of services with service_id and optional price",
+        examples=[[{"service_id": "550e8400-e29b-41d4-a716-446655440000", "price": 650.00}]]
+    )
+    
 
 
 class NurseUpdate(BaseModel):

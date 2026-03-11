@@ -45,3 +45,16 @@ class NurseServiceResponse(NurseServiceBase):
     class Config:
         from_attributes = True
 
+
+class NurseServiceUpdate(BaseModel):
+    """
+    Schema for updating the price of a nurse-service link.
+    """
+    price: Decimal = Field(
+        ...,
+        gt=0,
+        decimal_places=2,
+        description="The new price for this service by this nurse.",
+        examples=[750.00]
+    )
+

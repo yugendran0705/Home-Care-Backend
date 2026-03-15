@@ -219,7 +219,7 @@ def delete_booking(
     return deleted_booking
 
 
-@router.path(
+@router.patch(
     "/completed", response_model=BookingResponse, summary="Marks a booking as completed"
 )
 def complete_booking(

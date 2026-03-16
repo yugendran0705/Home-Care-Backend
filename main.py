@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 import models as model
 from config.database import engine
-from config.database import engine
+
 from views import patients, users, address, nurses, services, nurse_services
 from fastapi.middleware.cors import CORSMiddleware
 

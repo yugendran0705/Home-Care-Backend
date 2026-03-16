@@ -11,7 +11,6 @@ from services.nurses import NurseService
 import models
 from schemas.nurses import *
 from schemas.nurse_documents import *
-from schemas.services import ServiceBase
 
 # Create API router
 router = APIRouter(

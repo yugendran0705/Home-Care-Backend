@@ -26,6 +26,17 @@ class NurseBase(BaseModel):
     bio: Optional[str] = Field(None, examples=["Experienced pediatric nurse."])
     profile_picture_url: str = Field(..., examples=["https://example.com/profile.jpg"])
 
+class NurseServiceRegistrationItem(BaseModel):
+    """reprsents a single service registration entry for a nurse"""
+    service_id: uuid.UUID = Field(..., description="The ID of the service to register for this nurse.")
+    price: Optional[Decimal] = Field(
+        None,
+        description="An optional custom price for this service by this nurse. If null, the service's base price is used.",    
+    )
+
+
+
+
 
 class NurseCreate(NurseBase):
     """
@@ -35,7 +46,7 @@ class NurseCreate(NurseBase):
     email: EmailStr = Field(..., examples=["priya.sharma@example.com"])
     password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
     address: Optional[AddressCreate] = None
-    services: Optional[List[Dict[str, Any]]] = Field(
+    services: Optional[List[NurseServiceRegistrationItem]] = Field(
         None,
         description="Optional list of services with service_id and optional price",
         examples=[[{"service_id": "550e8400-e29b-41d4-a716-446655440000", "price": 650.00}]]

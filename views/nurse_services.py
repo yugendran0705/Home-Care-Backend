@@ -2,7 +2,6 @@
 
 import uuid
 from typing import List
-from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 
 # Import dependencies, services, models, and schemas
@@ -47,10 +46,16 @@ async def assign_service_to_nurse(
 
     for item in service_in:
         try:
+            #for non admin users, ensure services are only assigned to thmeselves by overriding nurse_id in the input
+            user_role = getattr(current_user, "role", None)
+            if user_role != "Admin" and hasattr(item, "nurse_id"):
+                item.nurse_id = current_user.id
+
             # Call service with current_user for validation
             new_assoc = service.assign_service_to_nurse(
                 nurse_service_in=item,
                 current_user_id=current_user.id
+            
             )
             created_associations.append(new_assoc)
 
@@ -100,12 +105,20 @@ async def update_nurse_service_price(
     nurse_id: uuid.UUID,
     service_id: uuid.UUID,
     price_update: NurseServiceUpdate,
+    current_user: models.User = nurse_dependency,
     service: NurseServiceService = Depends(get_nurse_service_service)
 ):
     """
     Updates the custom price for a service offered by a nurse.
     Only nurses and admins can perform this action.
     """
+    user_role = getattr(current_user, "role", None)
+    if user_role != "Admin" and nurse_id != getattr(current_user, "id", None):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nurses can only update prices for their own services."
+        )
+
     try:
         updated_association = service.update_service_price(
             nurse_id=nurse_id,
@@ -124,7 +137,7 @@ async def update_nurse_service_price(
 
 @router.delete(
     "/{nurse_id}/services",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Remove all services from a nurse's profile"
 )
 async def remove_service_from_nurse(

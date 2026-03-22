@@ -118,3 +118,21 @@ Please use the following format for your commit messages:
 `feature: 123 Implemented the new profile screen UI`
 
 - https://api.postman.com/collections/26433342-4b48923a-e40b-41dd-a649-aa3fb3e77e2b?access_key=PMAT-01KGJ6P9BMGZW0NBMNB61DES39
+
+
+## Indexes created
+✅ Indexes by Table:
+| Table           | Indexes | Key Indexes Added                                                              |
+| --------------- | ------- | ------------------------------------------------------------------------------ |
+| bookings        | 12      | patient_id, nurse_id, service_id, booking_status, scheduled times, composites |
+| availability    | 6       | nurse_id, is_booked, start_time, end_time, composites                         |
+| users           | 5       | user_type, is_active, email, created_at, last_login                           |
+| nurses          | 5       | address_id, is_verified, is_qualified, is_active, verified_active             |
+| payments        | 4       | patient_id, payment_status, payment_date, patient_status                      |
+| reviews         | 3       | patient_id, nurse_id, review_date                                             |
+| addresses       | 2       | user_id, city_state                                                           |
+| services        | 2       | is_active, is_qualified                                                       |
+| nurse_services  | 2       | nurse_id, service_id                                                          |
+| nurse_documents | 2       | nurse_id, verification_status                                                 |
+| patients        | 1       | address_id                                                                    |
+| patients        | 1       | address_id                                                       |

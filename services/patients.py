@@ -2,6 +2,7 @@
 
 import uuid
 from typing import Optional, Dict, Any
+import pickle
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -9,11 +10,11 @@ from sqlalchemy.orm import Session
 # Import necessary models, repositories, and other services
 import models
 from repositories.patients import PatientRepository
-from repositories.address import AddressRepository
 from .users import UserService
 from .address import AddressService
 from schemas.address import AddressCreate
 from config.security import create_access_token, create_refresh_token
+from utils.redis import get_cache, set_cache, delete_cache
 
 
 class PatientService:
@@ -100,7 +101,8 @@ class PatientService:
                     updates={"address_id": new_address.id, "is_primary": True}
                 )
             
-            self.db.refresh(new_patient)
+            # Reload patient with relationships to ensure they're eagerly loaded
+            new_patient = self.patient_repo.get_by_id(new_user.id)
             token_data = {
                 "id": str(new_user.id)
             }
@@ -138,13 +140,31 @@ class PatientService:
         Returns:
             models.Patient: The Patient ORM object, with related user/address data loaded.
         """
+        # Check cache first
+        cached_patient = get_cache(f"patient_{patient_id}")
+        if cached_patient:
+            patient = pickle.loads(cached_patient)
+            # Merge handles conflicts when objects with same ID already exist in session
+            return self.db.merge(patient, load=False)
+        
+        # Fetch patient with eagerly loaded relationships
         patient = self.patient_repo.get_by_id(patient_id)
         if not patient:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Patient not found."
             )
-        return patient
+        
+        # Access relationships to ensure they're loaded
+        _ = patient.user
+        _ = patient.primary_address
+        
+        # Expunge from session and cache as a detached object
+        self.db.expunge(patient)
+        set_cache(f"patient_{patient_id}", pickle.dumps(patient))
+        
+        # Merge back into session for current request
+        return self.db.merge(patient, load=False)
 
     def update_patient_profile(
         self, patient_id: uuid.UUID, updates: Dict[str, Any]
@@ -189,7 +209,9 @@ class PatientService:
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
-        self.db.refresh(patient)
+        # Invalidate cache and reload patient with relationships
+        delete_cache(f"patient_{patient_id}")
+        patient = self.patient_repo.get_by_id(patient_id)
         return patient
 
     def deactivate_patient_account(self, patient_id: uuid.UUID) -> bool:
@@ -206,7 +228,10 @@ class PatientService:
         self.get_patient_profile(patient_id)
         
         # Use the user service to handle deactivation logic
-        return self.user_service.deactivate_user(patient_id)
+        result = self.user_service.deactivate_user(patient_id)
+        if result:
+            delete_cache(f"patient_{patient_id}")
+        return result
     
     def get_all_patients(self, skip: int = 0, limit: int = 100) -> list[models.Patient]:
         """

@@ -1,8 +1,9 @@
 # /services/patients.py
 
 import uuid
-from typing import Optional, Dict, Any
-import pickle
+from typing import Optional, Dict, Any, Union
+import json
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -13,8 +14,11 @@ from repositories.patients import PatientRepository
 from .users import UserService
 from .address import AddressService
 from schemas.address import AddressCreate
+from schemas.patients import PatientResponse
 from config.security import create_access_token, create_refresh_token
-from utils.redis import get_cache, set_cache, delete_cache
+from utils.redis import get_cache, set_cache, delete_cache, PATIENT_CACHE_TTL
+
+logger = logging.getLogger(__name__)
 
 
 class PatientService:
@@ -127,27 +131,42 @@ class PatientService:
                 detail=f"An unexpected error occurred: {e}",
             )
 
-    def get_patient_profile(self, patient_id: uuid.UUID) -> models.Patient:
+    def get_patient_profile(self, patient_id: uuid.UUID) -> Union[models.Patient, PatientResponse]:
         """
         Retrieves a complete patient profile by their ID.
+        Implements Redis caching with JSON serialization (secure, no pickle).
+        Uses user_id as cache key with 15-minute TTL to prevent indefinite stale data.
+        
+        Returns cached Pydantic model on cache hit, or ORM object on cache miss.
+        FastAPI handles both transparently via response_model.
 
         Args:
-            patient_id (uuid.UUID): The unique ID of the patient.
+            patient_id (uuid.UUID): The unique ID of the patient (same as user_id).
 
         Raises:
             HTTPException: 404 Not Found, if the patient does not exist.
 
         Returns:
-            models.Patient: The Patient ORM object, with related user/address data loaded.
+            Union[models.Patient, PatientResponse]: Patient data (ORM or Pydantic model)
         """
-        # Check cache first
-        cached_patient = get_cache(f"patient_{patient_id}")
-        if cached_patient:
-            patient = pickle.loads(cached_patient)
-            # Merge handles conflicts when objects with same ID already exist in session
-            return self.db.merge(patient, load=False)
+        # Use user_id for cache key (patient_id == user_id)
+        cache_key = f"user_{patient_id}"
         
-        # Fetch patient with eagerly loaded relationships
+        # Try to get from cache (returns None if Redis unavailable)
+        cached_data = get_cache(cache_key)
+        if cached_data:
+            try:
+                # Deserialize JSON to dict and create Pydantic model
+                patient_dict = json.loads(cached_data.decode('utf-8'))
+                patient_response = PatientResponse(**patient_dict)
+                logger.debug(f"Cache hit for user {patient_id}")
+                return patient_response
+            except Exception as e:
+                # Corrupted cache data - log and fall through to DB
+                logger.warning(f"Failed to deserialize cached patient for user {patient_id}: {e}")
+        
+        # Cache miss or unavailable - fetch from database
+        logger.debug(f"Cache miss for user {patient_id}, fetching from database")
         patient = self.patient_repo.get_by_id(patient_id)
         if not patient:
             raise HTTPException(
@@ -155,16 +174,19 @@ class PatientService:
                 detail="Patient not found."
             )
         
-        # Access relationships to ensure they're loaded
-        _ = patient.user
-        _ = patient.primary_address
+        # Serialize to Pydantic for caching (safe JSON, no code execution risk)
+        try:
+            patient_response = PatientResponse.from_orm(patient)
+            # Cache as JSON with TTL (15 min default) to prevent indefinite stale data
+            cached_json = json.dumps(patient_response.model_dump(mode='json')).encode('utf-8')
+            if set_cache(cache_key, cached_json, ex=PATIENT_CACHE_TTL):
+                logger.debug(f"Cached patient for user {patient_id} as JSON with {PATIENT_CACHE_TTL}s TTL")
+        except Exception as e:
+            # Serialization failed - log but continue
+            logger.warning(f"Failed to cache patient for user {patient_id}: {e}")
         
-        # Expunge from session and cache as a detached object
-        self.db.expunge(patient)
-        set_cache(f"patient_{patient_id}", pickle.dumps(patient))
-        
-        # Merge back into session for current request
-        return self.db.merge(patient, load=False)
+        # Return ORM object (FastAPI will serialize via response_model)
+        return patient
 
     def update_patient_profile(
         self, patient_id: uuid.UUID, updates: Dict[str, Any]
@@ -210,7 +232,8 @@ class PatientService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
         # Invalidate cache and reload patient with relationships
-        delete_cache(f"patient_{patient_id}")
+        delete_cache(f"user_{patient_id}")
+        
         patient = self.patient_repo.get_by_id(patient_id)
         return patient
 
@@ -230,7 +253,7 @@ class PatientService:
         # Use the user service to handle deactivation logic
         result = self.user_service.deactivate_user(patient_id)
         if result:
-            delete_cache(f"patient_{patient_id}")
+            delete_cache(f"user_{patient_id}")
         return result
     
     def get_all_patients(self, skip: int = 0, limit: int = 100) -> list[models.Patient]:

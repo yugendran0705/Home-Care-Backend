@@ -9,6 +9,7 @@ from schemas.address import AddressCreate, AddressUpdate
 from models import Address as AddressModel
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from utils.redis import delete_cache
 
 
 class AddressService:
@@ -27,12 +28,18 @@ class AddressService:
     def create_address_for_user(self, address_in: AddressCreate, user_id: uuid.UUID) -> AddressModel:
         """
         Creates a new address and associates it with a user.
+        Invalidates user cache to ensure fresh data.
         """
         address_data = address_in.model_dump()
         address_data["user_id"] = user_id
         
         try:
-            return self.address_repo.create(address_data=address_data)
+            new_address = self.address_repo.create(address_data=address_data)
+            
+            # Invalidate user cache (harmless no-op if user has no cache)
+            delete_cache(f"user_{user_id}")
+            
+            return new_address
         except IntegrityError:
             raise ValueError("An integrity error occurred while creating the address.")
 
@@ -53,6 +60,7 @@ class AddressService:
     ) -> AddressModel:
         """
         Updates an address's details and handles the 'is_primary' business logic.
+        Invalidates user cache to ensure fresh data.
         """
         db_address = self.get_address_by_id(address_id=address_id)
         if not db_address or db_address.user_id != user_id:
@@ -68,11 +76,15 @@ class AddressService:
             updates=update_data
         )
 
+        # Invalidate user cache (harmless no-op if user has no cache)
+        delete_cache(f"user_{user_id}")
+
         return updated_address
 
     def delete_address(self, address_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """
         Deletes an address, with business logic to prevent deleting a primary address.
+        Invalidates user cache to ensure fresh data.
         """
         db_address = self.get_address_by_id(address_id=address_id)
         if not db_address or db_address.user_id != user_id:
@@ -81,11 +93,19 @@ class AddressService:
         if db_address.is_primary:
             raise ValueError("Cannot delete a primary address. Please set another as primary first.")
 
-        return self.address_repo.delete(address=db_address)
+        result = self.address_repo.delete(address=db_address)
+        
+        # Invalidate user cache (harmless no-op if user has no cache)
+        if result:
+            delete_cache(f"user_{user_id}")
+        
+        return result
     
     def update_primary_address(self, user_id: uuid.UUID, address_id: uuid.UUID) -> AddressModel:
         """
         Updates the primary address for a user, ensuring only one address can be primary.
+        Also updates the patients.address_id if the user is a patient.
+        Invalidates user cache to prevent stale address data.
         """
         db_address = self.get_address_by_id(address_id=address_id)
         if not db_address or db_address.user_id != user_id:
@@ -104,5 +124,8 @@ class AddressService:
                 patient=patient,
                 updates={"address_id": updated_address.id}
             )
+
+        # Invalidate user cache (harmless no-op if user has no cache)
+        delete_cache(f"user_{user_id}")
 
         return updated_address

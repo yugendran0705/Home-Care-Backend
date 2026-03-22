@@ -50,8 +50,8 @@ def upgrade() -> None:
     op.create_index('ix_payments_patient_id', 'payments', ['patient_id'])
     
     # Nurse Services (junction table)
-    op.create_index('ix_nurse_services_nurse_id', 'nurse_services', ['nurse_id'])
-    op.create_index('ix_nurse_services_service_id', 'nurse_services', ['service_id'])
+    # Note: nurse_id is covered by composite PK (nurse_id, service_id)
+    op.create_index('ix_nurse_services_service_id', 'nurse_services', ['service_id'])  # For reverse lookups
     
     # Nurse Documents
     op.create_index('ix_nurse_documents_nurse_id', 'nurse_documents', ['nurse_id'])
@@ -62,7 +62,7 @@ def upgrade() -> None:
     # Users
     op.create_index('ix_users_user_type', 'users', ['user_type'])
     op.create_index('ix_users_is_active', 'users', ['is_active'])
-    op.create_index('ix_users_email', 'users', ['email'])  # Already unique, but explicit
+    # Note: users.email already has a unique index, no additional index needed
     
     # Nurses
     op.create_index('ix_nurses_is_verified', 'nurses', ['is_verified'])
@@ -169,14 +169,14 @@ def downgrade() -> None:
     op.drop_index('ix_nurses_is_active', table_name='nurses')
     op.drop_index('ix_nurses_is_qualified', table_name='nurses')
     op.drop_index('ix_nurses_is_verified', table_name='nurses')
-    op.drop_index('ix_users_email', table_name='users')
+    # users.email index not dropped (never created - unique constraint handles it)
     op.drop_index('ix_users_is_active', table_name='users')
     op.drop_index('ix_users_user_type', table_name='users')
     
     # Foreign key indexes
     op.drop_index('ix_nurse_documents_nurse_id', table_name='nurse_documents')
+    # nurse_services_nurse_id not dropped (never created - composite PK covers it)
     op.drop_index('ix_nurse_services_service_id', table_name='nurse_services')
-    op.drop_index('ix_nurse_services_nurse_id', table_name='nurse_services')
     op.drop_index('ix_payments_patient_id', table_name='payments')
     op.drop_index('ix_reviews_nurse_id', table_name='reviews')
     op.drop_index('ix_reviews_patient_id', table_name='reviews')

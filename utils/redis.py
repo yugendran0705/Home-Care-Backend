@@ -1,6 +1,5 @@
 from config.redis import get_redis_connection
 import logging
-import uuid
 
 logger = logging.getLogger(__name__)
 

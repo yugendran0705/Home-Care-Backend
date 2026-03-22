@@ -131,7 +131,7 @@ class PatientService:
                 detail=f"An unexpected error occurred: {e}",
             )
 
-    def get_patient_profile(self, patient_id: uuid.UUID) -> Union[models.Patient, PatientResponse]:
+    def get_patient_profile(self, patient_id: uuid.UUID) -> PatientResponse:
         """
         Retrieves a complete patient profile by their ID.
         Implements Redis caching with JSON serialization (secure, no pickle).
@@ -152,7 +152,7 @@ class PatientService:
         # Use user_id for cache key (patient_id == user_id)
         cache_key = f"user_{patient_id}"
         
-        # Try to get from cache (returns None if Redis unavailable)
+        # Try to get from cache
         cached_data = get_cache(cache_key)
         if cached_data:
             try:
@@ -166,7 +166,7 @@ class PatientService:
                 logger.warning(f"Failed to deserialize cached patient for user {patient_id}: {e}")
         
         # Cache miss or unavailable - fetch from database
-        logger.debug(f"Cache miss for user {patient_id}, fetching from database")
+        logger.debug(f"Fetching patient for user {patient_id} from database")
         patient = self.patient_repo.get_by_id(patient_id)
         if not patient:
             raise HTTPException(
@@ -174,7 +174,7 @@ class PatientService:
                 detail="Patient not found."
             )
         
-        # Serialize to Pydantic for caching (safe JSON, no code execution risk)
+        # Cache the result
         try:
             patient_response = PatientResponse.from_orm(patient)
             # Cache as JSON with TTL (15 min default) to prevent indefinite stale data
@@ -203,7 +203,13 @@ class PatientService:
         Returns:
             models.Patient: The updated Patient ORM object.
         """
-        patient = self.get_patient_profile(patient_id)
+        # Fetch patient directly from DB (need ORM object for repository updates)
+        patient = self.patient_repo.get_by_id(patient_id)
+        if not patient:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Patient not found."
+            )
 
         # Separate updates for the User and Patient models
         user_update_data = {}
@@ -247,8 +253,13 @@ class PatientService:
         Returns:
             bool: True if the deactivation was successful.
         """
-        # get_patient_profile will raise 404 if not found
-        self.get_patient_profile(patient_id)
+        # Verify patient exists (raises 404 if not)
+        patient = self.patient_repo.get_by_id(patient_id)
+        if not patient:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Patient not found."
+            )
         
         # Use the user service to handle deactivation logic
         result = self.user_service.deactivate_user(patient_id)

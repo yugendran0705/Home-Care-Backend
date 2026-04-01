@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 
 import models
-from schemas.nurse_services import NurseServiceCreate
+from schemas.nurse_services import NurseServiceCreate, NurseServiceBulkCreate
 
 
 class NurseServiceRepository:
@@ -154,43 +154,39 @@ class NurseServiceRepository:
         self.db.refresh(db_nurse_service)
         return db_nurse_service
 
-    def bulk_create(self, *, nurse_services_list: List[NurseServiceCreate]) -> List[models.NurseService]:
+    
+
+    def bulk_create_for_nurse(
+        self,
+        *,
+        nurse_service_bulk_create: NurseServiceBulkCreate
+    ) -> List[models.NurseService]:
         """
-        Bulk creates multiple nurse-service associations in a single transaction.
+        Bulk creates nurse-service associations for a single nurse.
 
         Args:
-            nurse_services_list (List[NurseServiceCreate]): A list of NurseServiceCreate objects.
+            nurse_service_bulk_create (NurseServiceBulkCreate): The bulk assignment payload.
 
         Returns:
-            List[models.NurseService]: A list of the newly created NurseService associations.
+            List[models.NurseService]: The newly created NurseService associations.
         """
-        if not nurse_services_list:
+        if not nurse_service_bulk_create.service_ids:
             return []
 
-        # Validate referenced service_ids exist to avoid FK errors
-        service_ids = {svc.service_id for svc in nurse_services_list}
-        if service_ids:
-            stmt = select(models.Service.id).where(models.Service.id.in_(service_ids))
-            existing = set(self.db.execute(stmt).scalars().all())
-            missing = service_ids - existing
-            if missing:
-                raise ValueError(f"Service(s) with id(s) {missing} not found.")
-
-        # Create NurseService objects using only the schema data (no relationship loading)
         db_nurse_services = []
-        for service in nurse_services_list:
-            # Create the object using only the column values, not relationships
-            db_nurse_service = models.NurseService(
-                nurse_id=service.nurse_id,
-                service_id=service.service_id,
-                price=service.price
+        for service_id in nurse_service_bulk_create.service_ids:
+            db_nurse_services.append(
+                models.NurseService(
+                    nurse_id=nurse_service_bulk_create.nurse_id,
+                    service_id=service_id,
+                    price=nurse_service_bulk_create.price,
+                )
             )
-            db_nurse_services.append(db_nurse_service)
-        
+
         self.db.add_all(db_nurse_services)
         self.db.commit()
-        
+
         for service in db_nurse_services:
             self.db.refresh(service)
-        
+
         return db_nurse_services

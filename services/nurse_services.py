@@ -12,7 +12,14 @@ from repositories.nurse_services import NurseServiceRepository
 from repositories.nurses import NurseRepository
 from repositories.services import ServiceRepository
 import models
-from schemas.nurse_services import NurseServiceCreate, NurseServiceResponse
+from schemas.nurses import NurseResponse
+from schemas.nurse_services import (
+    NurseServiceBulkCreate,
+    NurseServiceBulkResponse,
+    NurseServiceItem,
+    NurseServicesResponse,
+    NurseServiceResponse,
+)
 
 
 class NurseServiceService:
@@ -29,21 +36,27 @@ class NurseServiceService:
         self.nurse_repo = NurseRepository(db)
         self.service_repo = ServiceRepository(db)
 
-    def assign_service_to_nurse(self, nurse_service_in: NurseServiceCreate) -> models.NurseService:
+    def assign_service_to_nurse(self, nurse_service_in: NurseServiceBulkCreate) -> NurseServiceBulkResponse:
         """
-        Assigns a service to a nurse with validation.
+        Assigns multiple services to a single nurse using bulk create.
 
         Args:
-            nurse_service_in (NurseServiceCreate): The service assignment data.
+            nurse_service_in (NurseServiceBulkCreate): The service assignment data.
 
         Returns:
-            models.NurseService: The created association.
+            NurseServiceBulkResponse: The created nurse-service assignment summary.
 
         Raises:
             HTTPException: If validation fails.
         """
         nurse_id = nurse_service_in.nurse_id
-        service_id = nurse_service_in.service_id
+        service_ids = nurse_service_in.service_ids or []
+
+        if not service_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one service_id is required."
+            )
 
         # Validate that nurse exists
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
@@ -53,28 +66,50 @@ class NurseServiceService:
                 detail=f"Nurse with ID {nurse_id} not found."
             )
 
-        # Validate that service exists
-        service = self.service_repo.get_by_id(service_id=service_id)
-        if not service:
+        unique_service_ids = list(dict.fromkeys(service_ids))
+        if len(unique_service_ids) != len(service_ids):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Duplicate service_ids are not allowed."
+            )
+
+        # Validate that every service exists
+        missing_services = []
+        for service_id in unique_service_ids:
+            if not self.service_repo.get_by_id(service_id=service_id):
+                missing_services.append(service_id)
+
+        if missing_services:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Service with ID {service_id} not found."
+                detail=f"Service(s) with ID(s) {missing_services} not found."
             )
 
-        # Check if the service is already assigned to this nurse
-        existing = self.nurse_service_repo.get_specific_nurse_service(
-            nurse_id=nurse_id, service_id=service_id
-        )
-        if existing:
+        # Ensure none of the services are already assigned to this nurse
+        duplicate_assignments = []
+        for service_id in unique_service_ids:
+            if self.nurse_service_repo.get_specific_nurse_service(
+                nurse_id=nurse_id,
+                service_id=service_id
+            ):
+                duplicate_assignments.append(service_id)
+
+        if duplicate_assignments:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Service {service_id} is already assigned to nurse {nurse_id}."
+                detail=f"Service(s) {duplicate_assignments} are already assigned to nurse {nurse_id}."
             )
 
-        # Create the association
-        return self.nurse_service_repo.add_service_to_nurse(nurse_service_in=nurse_service_in)
+        self.nurse_service_repo.bulk_create_for_nurse(
+            nurse_service_bulk_create=nurse_service_in
+        )
 
-    def get_services_for_nurse(self, nurse_id: uuid.UUID) -> List[NurseServiceResponse]:
+        return NurseServiceBulkResponse(
+            nurse_id=nurse_id,
+            service_ids=unique_service_ids,
+        )
+
+    def get_services_for_nurse(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
         Retrieves all services offered by a specific nurse.
 
@@ -82,7 +117,7 @@ class NurseServiceService:
             nurse_id (uuid.UUID): The nurse's ID.
 
         Returns:
-            List[NurseServiceResponse]: List of nurse-service associations.
+            NurseServicesResponse: Nested nurse profile with service list.
 
         Raises:
             HTTPException: If nurse not found.
@@ -96,7 +131,11 @@ class NurseServiceService:
             )
 
         nurse_services = self.nurse_service_repo.get_services_for_nurse(nurse_id=nurse_id)
-        return [NurseServiceResponse.model_validate(ns) for ns in nurse_services]
+        service_items = [NurseServiceItem.model_validate(ns) for ns in nurse_services]
+        return NurseServicesResponse(
+            nurse=NurseResponse.model_validate(nurse),
+            services=service_items,
+        )
 
     def update_service_price(self, nurse_id: uuid.UUID, service_id: uuid.UUID, new_price: Decimal) -> models.NurseService:
         """

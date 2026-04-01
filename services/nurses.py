@@ -2,6 +2,7 @@
 
 import uuid
 from typing import Optional, Dict, Any
+from decimal import Decimal
 from fastapi import UploadFile
 import shutil # Used for file operations
 
@@ -18,7 +19,7 @@ from services.users import UserService
 from services.address import AddressService
 import models
 from schemas.nurses import NurseCreate
-from schemas.nurse_services import NurseServiceCreate
+from schemas.nurse_services import NurseServiceBulkCreate, NurseServiceBulkResponse
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from config.security import create_access_token, create_refresh_token
@@ -58,14 +59,14 @@ class NurseService:
             # Step 0: Validate any provided services IDs before doing any writes.
             if services_data:
                 for service in services_data:
-                    service_id_raw = service.get("service_id")
-                    try:
-                        service_id = uuid.UUID(str(service_id_raw))
-                    except Exception:
-                        raise ValueError(f"Invalid service_id format: {service_id_raw}")
+                    for service_id_raw in service.service_ids:
+                        try:
+                            service_id = uuid.UUID(str(service_id_raw))
+                        except Exception:
+                            raise ValueError(f"Invalid service_id format: {service_id_raw}")
 
-                    if not self.service_repo.get_by_id(service_id=service_id):
-                        raise ValueError(f"Service with ID {service_id} not found.")
+                        if not self.service_repo.get_by_id(service_id=service_id):
+                            raise ValueError(f"Service with ID {service_id} not found.")
 
             # Step 1: Check for existing license number or email
             if self.nurse_repo.get_by_license_number(license_number=nurse_in.license_number):
@@ -100,29 +101,38 @@ class NurseService:
             
             # Step 5 (Optional): Bulk create and link services
             if services_data:
-                # build schema list while validating that each referenced service actually exists
-                nurse_service_schemas = []
+                service_ids = []
+                price_groups: dict[Optional[Decimal], list[uuid.UUID]] = {}
+
                 for service in services_data:
-                    service_id_raw = service.get("service_id")
-                    try:
-                        service_id = uuid.UUID(str(service_id_raw))
-                    except Exception:
-                        raise ValueError(f"Invalid service_id format: {service_id_raw}")
+                    if not service.service_ids:
+                        raise ValueError("Each service registration item must include at least one service_id.")
 
-                    # check existence up‑front to avoid DBFK error later
-                    if not self.service_repo.get_by_id(service_id=service_id):
-                        raise ValueError(f"Service with ID {service_id} not found.")
+                    for service_id_raw in service.service_ids:
+                        try:
+                            service_id = uuid.UUID(str(service_id_raw))
+                        except Exception:
+                            raise ValueError(f"Invalid service_id format: {service_id_raw}")
 
-                    nurse_service_schemas.append(
-                        NurseServiceCreate(
-                            nurse_id=new_nurse.id,
-                            service_id=service_id,
-                            price=service.get("price")
-                        )
+                        if service_id in service_ids:
+                            raise ValueError(f"Duplicate service_id detected: {service_id}")
+
+                        # check existence up‑front to avoid DBFK error later
+                        if not self.service_repo.get_by_id(service_id=service_id):
+                            raise ValueError(f"Service with ID {service_id} not found.")
+
+                        service_ids.append(service_id)
+                        price_groups.setdefault(service.price, []).append(service_id)
+
+                for price, grouped_service_ids in price_groups.items():
+                    nurse_service_bulk_create = NurseServiceBulkCreate(
+                        nurse_id=new_nurse.id,
+                        service_ids=grouped_service_ids,
+                        price=price,
                     )
-
-                # use bulk insert after validation
-                self.nurse_service_repo.bulk_create(nurse_services_list=nurse_service_schemas)
+                    self.nurse_service_repo.bulk_create_for_nurse(
+                        nurse_service_bulk_create=nurse_service_bulk_create
+                    )
             
             self.db.refresh(new_nurse)
             token_data = {

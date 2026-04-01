@@ -9,7 +9,7 @@ from config.database import get_db
 from utils.roleChecker import RoleChecker
 from services.nurse_services import NurseServiceService
 import models
-from schemas.nurse_services import NurseServiceCreate, NurseServiceResponse, NurseServiceUpdate
+from schemas.nurse_services import NurseServiceBulkCreate, NurseServiceBulkResponse, NurseServiceResponse, NurseServiceUpdate, NurseServicesResponse
 
 # Create API router
 router = APIRouter(
@@ -28,52 +28,40 @@ admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 
 @router.post(
     "/services",
-    response_model=List[NurseServiceResponse],
+    response_model=NurseServiceBulkResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Assign services to current nurse"
+    summary="Assign multiple services to a nurse"
 )
 async def assign_service_to_nurse(
-    service_in: List[NurseServiceCreate],
+    service_in: NurseServiceBulkCreate,
     current_user: models.User = nurse_dependency,
     service: NurseServiceService = Depends(get_nurse_service_service)
 ):
     """
-    Assigns multiple services to the currently authenticated nurse with optional custom prices.
-    Only nurses can assign services to themselves, admins can assign to any nurse.
+    Assigns multiple services to a specific nurse using a single bulk request.
+    Only nurses can assign services to themselves; admins can assign to any nurse.
     """
-    
-    created_associations = []
+    user_role = getattr(current_user, "user_type", None)
+    if user_role != "Admin":
+        service_in = service_in.model_copy(update={"nurse_id": current_user.id})
 
-    for item in service_in:
-        try:
-            #for non admin users, ensure services are only assigned to thmeselves by overriding nurse_id in the input
-            user_role = getattr(current_user, "role", None)
-            if user_role != "Admin" and hasattr(item, "nurse_id"):
-                item.nurse_id = current_user.id
-
-            # Call service with current_user for validation
-            new_assoc = service.assign_service_to_nurse(
-                nurse_service_in=item,
-                current_user_id=current_user.id
-            
-            )
-            created_associations.append(new_assoc)
-
-        except HTTPException as e:
-            # propagate known HTTP errors
-            raise e
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"An unexpected error occurred: {str(e)}"
-            )
-
-    return [NurseServiceResponse.model_validate(assoc) for assoc in created_associations]
+    try:
+        bulk_response = service.assign_service_to_nurse(
+            nurse_service_in=service_in
+        )
+        return bulk_response
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 @router.get(
     "/{nurse_id}/services",
-    response_model=List[NurseServiceResponse],
+    response_model=NurseServicesResponse,
     summary="Get all services offered by a nurse"
 )
 async def get_nurse_services(
@@ -112,7 +100,7 @@ async def update_nurse_service_price(
     Updates the custom price for a service offered by a nurse.
     Only nurses and admins can perform this action.
     """
-    user_role = getattr(current_user, "role", None)
+    user_role = getattr(current_user, "user_type", None)
     if user_role != "Admin" and nurse_id != getattr(current_user, "id", None):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

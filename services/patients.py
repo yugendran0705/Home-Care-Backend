@@ -1,7 +1,7 @@
 # /services/patients.py
 
 import uuid
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any
 import json
 import logging
 
@@ -140,7 +140,7 @@ class PatientService:
             HTTPException: 404 Not Found, if the patient does not exist.
 
         Returns:
-            Union[models.Patient, PatientResponse]: Patient data (ORM or Pydantic model)
+            PatientResponse: Patient data as a Pydantic model
         """
         # Use user_id for cache key (patient_id == user_id)
         cache_key = f"user_{patient_id}"

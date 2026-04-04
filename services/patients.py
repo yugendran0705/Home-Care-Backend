@@ -133,13 +133,6 @@ class PatientService:
 
     def get_patient_profile(self, patient_id: uuid.UUID) -> PatientResponse:
         """
-        Retrieves a complete patient profile by their ID.
-        Implements Redis caching with JSON serialization (secure, no pickle).
-        Uses user_id as cache key with 15-minute TTL to prevent indefinite stale data.
-        
-        Returns cached Pydantic model on cache hit, or ORM object on cache miss.
-        FastAPI handles both transparently via response_model.
-
         Args:
             patient_id (uuid.UUID): The unique ID of the patient (same as user_id).
 
@@ -174,19 +167,20 @@ class PatientService:
                 detail="Patient not found."
             )
         
+        # Convert to Pydantic model
+        patient_response = PatientResponse.model_validate(patient, from_attributes=True)
+        
         # Cache the result
         try:
-            patient_response = PatientResponse.from_orm(patient)
             # Cache as JSON with TTL (15 min default) to prevent indefinite stale data
             cached_json = json.dumps(patient_response.model_dump(mode='json')).encode('utf-8')
             if set_cache(cache_key, cached_json, ex=PATIENT_CACHE_TTL):
                 logger.debug(f"Cached patient for user {patient_id} as JSON with {PATIENT_CACHE_TTL}s TTL")
         except Exception as e:
-            # Serialization failed - log but continue
+            # Caching failed - log but continue with response
             logger.warning(f"Failed to cache patient for user {patient_id}: {e}")
         
-        # Return ORM object (FastAPI will serialize via response_model)
-        return patient
+        return patient_response
 
     def update_patient_profile(
         self, patient_id: uuid.UUID, updates: Dict[str, Any]

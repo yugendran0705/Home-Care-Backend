@@ -1,7 +1,7 @@
 """Add database indexes for performance optimization
 
 Revision ID: add_database_indexes
-Revises: 45910d2620a6
+Revises: ce655b1b3ada
 Create Date: 2026-03-22 00:00:00.000000
 
 """

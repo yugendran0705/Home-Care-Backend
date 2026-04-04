@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import uuid
 import models
@@ -24,15 +24,28 @@ class PatientRepository:
 
     def get_by_id(self, patient_id: uuid.UUID) -> Optional[models.Patient]:
         """
-        Retrieves a patient by their unique ID.
+        Retrieves a patient by their unique ID with eager loading of relationships.
         """
-        return self.db.query(models.Patient).filter(models.Patient.id == patient_id).first()
+        return (
+            self.db.query(models.Patient)
+            .options(joinedload(models.Patient.user))
+            .options(joinedload(models.Patient.primary_address))
+            .filter(models.Patient.id == patient_id)
+            .first()
+        )
 
     def get_all(self, skip: int = 0, limit: int = 100) -> List[models.Patient]:
         """
-        Retrieves all patients with optional pagination.
+        Retrieves all patients with optional pagination and eager loading of relationships.
         """
-        return self.db.query(models.Patient).offset(skip).limit(limit).all()
+        return (
+            self.db.query(models.Patient)
+            .options(joinedload(models.Patient.user))
+            .options(joinedload(models.Patient.primary_address))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
     def update(self, patient: models.Patient, updates: dict) -> models.Patient:
         """

@@ -10,6 +10,7 @@ import models
 from repositories.users import UserRepository
 from config.security import create_access_token, create_refresh_token, verify_token
 from jose import JWTError
+from utils.redis import delete_cache
 
 # Password hashing context (for bcrypt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -115,7 +116,7 @@ class UserService:
     def update_user_profile(self, user_id: uuid.UUID, updates: dict) -> Optional[models.User]:
         """
         Business logic for updating a user's profile.
-        You can add specific validation here.
+        Invalidates user cache to ensure fresh data.
         """
         user = self.user_repo.get_user_by_id(user_id)
         if not user:
@@ -130,11 +131,17 @@ class UserService:
                     detail="New email is already in use."
                 )
         
-        return self.user_repo.update_user(user.id, updates)
+        updated_user = self.user_repo.update_user(user.id, updates)
+        
+        # Invalidate user cache (harmless no-op if user has no cache)
+        delete_cache(f"user_{user_id}")
+        
+        return updated_user
 
     def deactivate_user(self, user_id: uuid.UUID) -> bool:
         """
         Business logic to deactivate a user account.
+        Invalidates user cache to ensure fresh data.
         """
         user = self.user_repo.get_user_by_id(user_id)
         if not user:
@@ -142,6 +149,10 @@ class UserService:
         
         updates = {"is_active": False}
         self.user_repo.update_user(user.id, updates)
+        
+        # Invalidate user cache (harmless no-op if user has no cache)
+        delete_cache(f"user_{user_id}")
+        
         return True
     
     def create_access_token_with_refresh_token(self, refresh_token: str) -> Optional[Dict[str, str]]:

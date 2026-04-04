@@ -119,13 +119,11 @@ class NurseServiceRepository:
         Returns:
             int: The number of services removed.
         """
-        statement = select(models.NurseService).where(models.NurseService.nurse_id == nurse_id)
-        nurse_services = self.db.execute(statement).scalars().all()
-        
-        count = len(nurse_services)
-        for service in nurse_services:
-            self.db.delete(service)
-        
+        count = (
+            self.db.query(models.NurseService)
+            .filter(models.NurseService.nurse_id == nurse_id)
+            .delete(synchronize_session=False)
+        )
         self.db.commit()
         return count
 

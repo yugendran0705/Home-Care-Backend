@@ -2,8 +2,9 @@
 
 import uuid
 from datetime import date
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from decimal import Decimal
+
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -29,7 +30,9 @@ class NurseBase(BaseModel):
 class NurseServiceRegistrationItem(BaseModel):
     """Represents a group of service IDs to register for a nurse."""
     service_ids: List[uuid.UUID] = Field(
-        ..., description="The list of service IDs to register for this nurse."
+        ..., 
+        min_items=1,
+        description="The list of service IDs to register for this nurse."
     )
     price: Optional[Decimal] = Field(
         None,

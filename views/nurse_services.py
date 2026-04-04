@@ -1,7 +1,6 @@
 # /views/nurse_services.py
 
 import uuid
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 # Import dependencies, services, models, and schemas
@@ -87,7 +86,7 @@ async def get_nurse_services(
     "/{nurse_id}/services/{service_id}",
     response_model=NurseServiceResponse,
     summary="Update the price for a nurse-service link",
-    dependencies=[nurse_dependency]
+    
 )
 async def update_nurse_service_price(
     nurse_id: uuid.UUID,

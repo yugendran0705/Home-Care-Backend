@@ -19,10 +19,11 @@ from services.users import UserService
 from services.address import AddressService
 import models
 from schemas.nurses import NurseCreate
-from schemas.nurse_services import NurseServiceBulkCreate, NurseServiceBulkResponse
+from schemas.nurse_services import NurseServiceBulkCreate
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from config.security import create_access_token, create_refresh_token
+from pydantic import BaseModel
 
 
 class NurseService:
@@ -57,16 +58,27 @@ class NurseService:
 
         try:
             # Step 0: Validate any provided services IDs before doing any writes.
+            price_groups: dict[Optional[Decimal], list[uuid.UUID]] = {}
             if services_data:
+                service_ids = []
                 for service in services_data:
+                    if not service.service_ids:
+                        raise ValueError("Each service registration item must include at least one service_id.")
+
                     for service_id_raw in service.service_ids:
                         try:
                             service_id = uuid.UUID(str(service_id_raw))
                         except Exception:
                             raise ValueError(f"Invalid service_id format: {service_id_raw}")
 
+                        if service_id in service_ids:
+                            raise ValueError(f"Duplicate service_id detected: {service_id}")
+
                         if not self.service_repo.get_by_id(service_id=service_id):
                             raise ValueError(f"Service with ID {service_id} not found.")
+
+                        service_ids.append(service_id)
+                        price_groups.setdefault(service.price, []).append(service_id)
 
             # Step 1: Check for existing license number or email
             if self.nurse_repo.get_by_license_number(license_number=nurse_in.license_number):
@@ -100,39 +112,15 @@ class NurseService:
                 )
             
             # Step 5 (Optional): Bulk create and link services
-            if services_data:
-                service_ids = []
-                price_groups: dict[Optional[Decimal], list[uuid.UUID]] = {}
-
-                for service in services_data:
-                    if not service.service_ids:
-                        raise ValueError("Each service registration item must include at least one service_id.")
-
-                    for service_id_raw in service.service_ids:
-                        try:
-                            service_id = uuid.UUID(str(service_id_raw))
-                        except Exception:
-                            raise ValueError(f"Invalid service_id format: {service_id_raw}")
-
-                        if service_id in service_ids:
-                            raise ValueError(f"Duplicate service_id detected: {service_id}")
-
-                        # check existence up‑front to avoid DBFK error later
-                        if not self.service_repo.get_by_id(service_id=service_id):
-                            raise ValueError(f"Service with ID {service_id} not found.")
-
-                        service_ids.append(service_id)
-                        price_groups.setdefault(service.price, []).append(service_id)
-
-                for price, grouped_service_ids in price_groups.items():
-                    nurse_service_bulk_create = NurseServiceBulkCreate(
-                        nurse_id=new_nurse.id,
-                        service_ids=grouped_service_ids,
-                        price=price,
-                    )
-                    self.nurse_service_repo.bulk_create_for_nurse(
-                        nurse_service_bulk_create=nurse_service_bulk_create
-                    )
+            for price, grouped_service_ids in price_groups.items():
+                nurse_service_bulk_create = NurseServiceBulkCreate(
+                    nurse_id=new_nurse.id,
+                    service_ids=grouped_service_ids,
+                    price=price,
+                )
+                self.nurse_service_repo.bulk_create_for_nurse(
+                    nurse_service_bulk_create=nurse_service_bulk_create
+                )
             
             self.db.refresh(new_nurse)
             token_data = {
@@ -244,4 +232,3 @@ class NurseService:
                 detail="Nurse account is already verified."
             )
         return self.nurse_repo.update(nurse_id=nurse.id, updates={"is_verified": True})
-    

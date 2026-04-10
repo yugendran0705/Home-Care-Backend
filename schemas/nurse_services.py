@@ -38,7 +38,11 @@ class NurseServiceBulkCreate(BaseModel):
     Schema for assigning multiple services to a single nurse.
     """
     nurse_id: uuid.UUID
-    service_ids: List[uuid.UUID]
+    service_ids: List[uuid.UUID] = Field(
+        ...,
+        min_items=1,
+        description="A list of service IDs to link to the nurse."
+    )
     price: Optional[Decimal] = Field(
         None,
         gt=0,

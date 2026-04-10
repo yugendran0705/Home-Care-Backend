@@ -182,9 +182,16 @@ class NurseServiceRepository:
             )
 
         self.db.add_all(db_nurse_services)
-        self.db.commit()
+        try:  
+            self.db.commit()  
 
-        for service in db_nurse_services:
-            self.db.refresh(service)
+            for service in db_nurse_services:  
+                self.db.refresh(service)  
+        except Exception:  
+            self.db.rollback()  
+            raise  HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to assign services to nurse. Please ensure all service IDs are valid and not already assigned to this nurse."
+            )   
 
         return db_nurse_services

@@ -23,7 +23,7 @@ from schemas.nurse_services import NurseServiceBulkCreate
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from config.security import create_access_token, create_refresh_token
-from pydantic import BaseModel
+
 
 
 class NurseService:
@@ -56,33 +56,48 @@ class NurseService:
         address_data = nurse_in.address
         services_data = nurse_in.services
 
+        # Step 0: Validate any provided services IDs before doing any writes.
+        price_groups: dict[Optional[Decimal], list[uuid.UUID]] = {}
+        if services_data:
+            service_ids = []
+            for service in services_data:
+                if not service.service_ids:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Each service registration item must include at least one service_id."
+                    )
+
+                for service_id_raw in service.service_ids:
+                    try:
+                        service_id = uuid.UUID(str(service_id_raw))
+                    except Exception:
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"Invalid service_id format: {service_id_raw}"
+                        )
+
+                    if service_id in service_ids:
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"Duplicate service_id detected: {service_id}"
+                        )
+
+                    if not self.service_repo.get_by_id(service_id=service_id):
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Service with ID {service_id} not found."
+                        )
+
+                    service_ids.append(service_id)
+                    price_groups.setdefault(service.price, []).append(service_id)
+
         try:
-            # Step 0: Validate any provided services IDs before doing any writes.
-            price_groups: dict[Optional[Decimal], list[uuid.UUID]] = {}
-            if services_data:
-                service_ids = []
-                for service in services_data:
-                    if not service.service_ids:
-                        raise ValueError("Each service registration item must include at least one service_id.")
-
-                    for service_id_raw in service.service_ids:
-                        try:
-                            service_id = uuid.UUID(str(service_id_raw))
-                        except Exception:
-                            raise ValueError(f"Invalid service_id format: {service_id_raw}")
-
-                        if service_id in service_ids:
-                            raise ValueError(f"Duplicate service_id detected: {service_id}")
-
-                        if not self.service_repo.get_by_id(service_id=service_id):
-                            raise ValueError(f"Service with ID {service_id} not found.")
-
-                        service_ids.append(service_id)
-                        price_groups.setdefault(service.price, []).append(service_id)
-
             # Step 1: Check for existing license number or email
             if self.nurse_repo.get_by_license_number(license_number=nurse_in.license_number):
-                raise ValueError(f"License number '{nurse_in.license_number}' is already registered.")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"License number '{nurse_in.license_number}' is already registered."
+                )
             
             # Step 2: Create the User account
             new_user = self.user_service.create_new_user(
@@ -135,14 +150,7 @@ class NurseService:
                 "nurse": new_nurse
             }
 
-        except ValueError as e:
-            # rollback on any validation failure
-            self.db.rollback()
-            err_msg = str(e)
-            # if the error was about a missing resource, map to 404
-            if "not found" in err_msg.lower():
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err_msg)
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err_msg)
+        
         except Exception as e:
             self.db.rollback()
             raise HTTPException(

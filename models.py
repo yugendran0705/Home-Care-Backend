@@ -107,7 +107,6 @@ class NurseService(Base):
     # Composite primary key for the junction table
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), primary_key=True)
     service_id = Column(UUID(as_uuid=True), ForeignKey("services.service_id"), primary_key=True)
-    price = Column(Numeric(10, 2), nullable=True) # Nullable, as per DBML
 
     # Relationships
     nurse = relationship("Nurse", back_populates="nurse_services")

@@ -1,15 +1,16 @@
 # /services/users.py
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional, Dict
 import uuid
-from datetime import datetime
 
 from passlib.context import CryptContext
 import models
 from repositories.users import UserRepository
 from config.security import create_access_token, create_refresh_token, verify_token
 from jose import JWTError
+from utils.redis import delete_cache
 
 # Password hashing context (for bcrypt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -46,7 +47,10 @@ class UserService:
         """
         existing_user = self.user_repo.get_user_by_email(email)
         if existing_user:
-            raise ValueError("Email already registered.")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered."
+            )
         
         hashed_password = self.get_password_hash(password)
         
@@ -94,7 +98,10 @@ class UserService:
 
         # Case 2: User is inactive
         if not user.is_active:
-            raise ValueError("Your account is inactive. Please contact support.")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is inactive."
+            )
 
         # If authentication is successful, create tokens
         token_data = {
@@ -109,7 +116,7 @@ class UserService:
     def update_user_profile(self, user_id: uuid.UUID, updates: dict) -> Optional[models.User]:
         """
         Business logic for updating a user's profile.
-        You can add specific validation here.
+        Invalidates user cache to ensure fresh data.
         """
         user = self.user_repo.get_user_by_id(user_id)
         if not user:
@@ -119,13 +126,22 @@ class UserService:
         if 'email' in updates and updates['email'] != user.email:
             existing_user = self.user_repo.get_user_by_email(updates['email'])
             if existing_user:
-                raise ValueError("New email is already in use.")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="New email is already in use."
+                )
         
-        return self.user_repo.update_user(user.id, updates)
+        updated_user = self.user_repo.update_user(user.id, updates)
+        
+        # Invalidate user cache (harmless no-op if user has no cache)
+        delete_cache(f"user_{user_id}")
+        
+        return updated_user
 
     def deactivate_user(self, user_id: uuid.UUID) -> bool:
         """
         Business logic to deactivate a user account.
+        Invalidates user cache to ensure fresh data.
         """
         user = self.user_repo.get_user_by_id(user_id)
         if not user:
@@ -133,6 +149,10 @@ class UserService:
         
         updates = {"is_active": False}
         self.user_repo.update_user(user.id, updates)
+        
+        # Invalidate user cache (harmless no-op if user has no cache)
+        delete_cache(f"user_{user_id}")
+        
         return True
     
     def create_access_token_with_refresh_token(self, refresh_token: str) -> Optional[Dict[str, str]]:
@@ -143,18 +163,27 @@ class UserService:
             # Step 1: Verify the refresh token's signature and expiration
             payload = verify_token(refresh_token)
             if not payload:
-                raise ValueError("Invalid refresh token.")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid refresh token."
+                )
 
             # Step 2: Extract the user ID from the token
             user_id_str = payload.get("id")
             if not user_id_str:
-                raise ValueError("Invalid token payload.")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token payload."
+                )
             
             # Step 3: Check if the user exists and is active
             user_id = uuid.UUID(user_id_str)
             user = self.user_repo.get_user_by_id(user_id)
             if not user or not user.is_active:
-                raise ValueError("Invalid or inactive user.")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or inactive user."
+                )
                 
             # Step 4: If all checks pass, create and return new tokens
             token_data = {"id": str(user.id)}
@@ -164,6 +193,12 @@ class UserService:
             return {"access_token": new_access_token, "refresh_token": new_refresh_token}
 
         except JWTError:
-            raise ValueError("Invalid token format.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token format."
+            )
         except Exception:
-            raise ValueError("Could not validate credentials.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials."
+            )

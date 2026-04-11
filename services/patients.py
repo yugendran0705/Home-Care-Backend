@@ -2,6 +2,8 @@
 
 import uuid
 from typing import Optional, Dict, Any
+import json
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -9,11 +11,14 @@ from sqlalchemy.orm import Session
 # Import necessary models, repositories, and other services
 import models
 from repositories.patients import PatientRepository
-from repositories.address import AddressRepository
 from .users import UserService
 from .address import AddressService
 from schemas.address import AddressCreate
+from schemas.patients import PatientResponse
 from config.security import create_access_token, create_refresh_token
+from utils.redis import get_cache, set_cache, delete_cache, PATIENT_CACHE_TTL
+
+logger = logging.getLogger(__name__)
 
 
 class PatientService:
@@ -100,7 +105,8 @@ class PatientService:
                     updates={"address_id": new_address.id, "is_primary": True}
                 )
             
-            self.db.refresh(new_patient)
+            # Reload patient with relationships to ensure they're eagerly loaded
+            new_patient = self.patient_repo.get_by_id(new_user.id)
             token_data = {
                 "id": str(new_user.id)
             }
@@ -125,26 +131,56 @@ class PatientService:
                 detail=f"An unexpected error occurred: {e}",
             )
 
-    def get_patient_profile(self, patient_id: uuid.UUID) -> models.Patient:
+    def get_patient_profile(self, patient_id: uuid.UUID) -> PatientResponse:
         """
-        Retrieves a complete patient profile by their ID.
-
         Args:
-            patient_id (uuid.UUID): The unique ID of the patient.
+            patient_id (uuid.UUID): The unique ID of the patient (same as user_id).
 
         Raises:
             HTTPException: 404 Not Found, if the patient does not exist.
 
         Returns:
-            models.Patient: The Patient ORM object, with related user/address data loaded.
+            PatientResponse: Patient data as a Pydantic model
         """
+        # Use user_id for cache key (patient_id == user_id)
+        cache_key = f"user_{patient_id}"
+        
+        # Try to get from cache
+        cached_data = get_cache(cache_key)
+        if cached_data:
+            try:
+                # Deserialize JSON to dict and create Pydantic model
+                patient_dict = json.loads(cached_data.decode('utf-8'))
+                patient_response = PatientResponse(**patient_dict)
+                logger.debug(f"Cache hit for user {patient_id}")
+                return patient_response
+            except Exception as e:
+                # Corrupted cache data - log and fall through to DB
+                logger.warning(f"Failed to deserialize cached patient for user {patient_id}: {e}")
+        
+        # Cache miss or unavailable - fetch from database
+        logger.debug(f"Fetching patient for user {patient_id} from database")
         patient = self.patient_repo.get_by_id(patient_id)
         if not patient:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Patient not found."
             )
-        return patient
+        
+        # Convert to Pydantic model
+        patient_response = PatientResponse.model_validate(patient, from_attributes=True)
+        
+        # Cache the result
+        try:
+            # Cache as JSON with TTL (15 min default) to prevent indefinite stale data
+            cached_json = json.dumps(patient_response.model_dump(mode='json')).encode('utf-8')
+            if set_cache(cache_key, cached_json, ex=PATIENT_CACHE_TTL):
+                logger.debug(f"Cached patient for user {patient_id} as JSON with {PATIENT_CACHE_TTL}s TTL")
+        except Exception as e:
+            # Caching failed - log but continue with response
+            logger.warning(f"Failed to cache patient for user {patient_id}: {e}")
+        
+        return patient_response
 
     def update_patient_profile(
         self, patient_id: uuid.UUID, updates: Dict[str, Any]
@@ -161,7 +197,13 @@ class PatientService:
         Returns:
             models.Patient: The updated Patient ORM object.
         """
-        patient = self.get_patient_profile(patient_id)
+        # Fetch patient directly from DB (need ORM object for repository updates)
+        patient = self.patient_repo.get_by_id(patient_id)
+        if not patient:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Patient not found."
+            )
 
         # Separate updates for the User and Patient models
         user_update_data = {}
@@ -189,7 +231,10 @@ class PatientService:
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
-        self.db.refresh(patient)
+        # Invalidate cache and reload patient with relationships
+        delete_cache(f"user_{patient_id}")
+        
+        patient = self.patient_repo.get_by_id(patient_id)
         return patient
 
     def deactivate_patient_account(self, patient_id: uuid.UUID) -> bool:
@@ -202,11 +247,19 @@ class PatientService:
         Returns:
             bool: True if the deactivation was successful.
         """
-        # get_patient_profile will raise 404 if not found
-        self.get_patient_profile(patient_id)
+        # Verify patient exists (raises 404 if not)
+        patient = self.patient_repo.get_by_id(patient_id)
+        if not patient:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Patient not found."
+            )
         
         # Use the user service to handle deactivation logic
-        return self.user_service.deactivate_user(patient_id)
+        result = self.user_service.deactivate_user(patient_id)
+        if result:
+            delete_cache(f"user_{patient_id}")
+        return result
     
     def get_all_patients(self, skip: int = 0, limit: int = 100) -> list[models.Patient]:
         """

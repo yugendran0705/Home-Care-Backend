@@ -82,21 +82,22 @@ async def get_nurse_services(
 @router.put(
     "/{nurse_id}/services",
     response_model=NurseServicesResponse,
-    summary="Update the price for a nurse-service link",
-    
+    summary="Update services for a nurse",
+    status_code=status.HTTP_200_OK
 )
 async def update_nurse_service_price(
+    nurse_id: uuid.UUID,
     service_in: NurseServiceBulkCreate,
     current_user: models.User = nurse_dependency,
     service: NurseServiceService = Depends(get_nurse_service_associate)
 ):
     """
-    Updates the custom price for a service offered by a nurse.
-    Only nurses and admins can perform this action.
+    Updates the services offered by a nurse.
+    Only nurses can update their own services; admins can update any nurse's services.
     """
     try:
         updated_association = service.update_services_for_nurse(
-            nurse_id=current_user.id if current_user.user_type == "Nurse" else None,
+            nurse_id=nurse_id,
             service_ids=service_in.service_ids,
         )
         return NurseServicesResponse.model_validate(updated_association)

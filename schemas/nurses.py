@@ -4,8 +4,6 @@ import uuid
 from datetime import date
 from typing import Optional, List
 from decimal import Decimal
-
-
 from pydantic import BaseModel, EmailStr, Field
 
 # Import other schemas for nesting
@@ -34,10 +32,6 @@ class NurseServiceRegistrationItem(BaseModel):
         min_items=1,
         description="The list of service IDs to register for this nurse."
     )
-    price: Optional[Decimal] = Field(
-        None,
-        description="An optional custom price for the listed services by this nurse. If null, the service's base price is used.",
-    )
 
 
 
@@ -53,8 +47,8 @@ class NurseCreate(NurseBase):
     address: Optional[AddressCreate] = None
     services: Optional[List[NurseServiceRegistrationItem]] = Field(
         None,
-        description="Optional list of service groups with service_ids and optional price",
-        examples=[[{"service_ids": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"], "price": 650.00}]]
+        description="Optional list of service IDs to register for the nurse",
+        examples=[[{"service_ids": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"]}]]
     )
     
 

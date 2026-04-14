@@ -2,7 +2,6 @@
 
 import uuid
 from typing import Optional, Dict, Any
-from decimal import Decimal
 from fastapi import UploadFile
 import shutil # Used for file operations
 
@@ -19,7 +18,6 @@ from services.users import UserService
 from services.address import AddressService
 import models
 from schemas.nurses import NurseCreate
-from schemas.nurse_services import NurseServiceBulkCreate
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from config.security import create_access_token, create_refresh_token
@@ -57,9 +55,8 @@ class NurseService:
         services_data = nurse_in.services
 
         # Step 0: Validate any provided services IDs before doing any writes.
-        price_groups: dict[Optional[Decimal], list[uuid.UUID]] = {}
+        service_ids = []
         if services_data:
-            service_ids = []
             for service in services_data:
                 if not service.service_ids:
                     raise HTTPException(
@@ -89,7 +86,6 @@ class NurseService:
                         )
 
                     service_ids.append(service_id)
-                    price_groups.setdefault(service.price, []).append(service_id)
 
         try:
             # Step 1: Check for existing license number or email
@@ -127,14 +123,10 @@ class NurseService:
                 )
             
             # Step 5 (Optional): Bulk create and link services
-            for price, grouped_service_ids in price_groups.items():
-                nurse_service_bulk_create = NurseServiceBulkCreate(
-                    nurse_id=new_nurse.id,
-                    service_ids=grouped_service_ids,
-                    price=price,
-                )
+            if service_ids:
                 self.nurse_service_repo.bulk_create_for_nurse(
-                    nurse_service_bulk_create=nurse_service_bulk_create
+                    nurse_id=new_nurse.id,
+                    service_ids=service_ids
                 )
             
             self.db.refresh(new_nurse)

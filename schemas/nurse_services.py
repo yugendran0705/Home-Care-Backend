@@ -22,7 +22,7 @@ class NurseServiceBulkCreate(BaseModel):
     """
     service_ids: List[uuid.UUID] = Field(
         ...,
-        min_items=1,
+        min_length=1,
         description="A list of service IDs to link to the nurse."
     )
 

@@ -23,6 +23,7 @@ def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociateService:
 # Define role-based access dependencies
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
 admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
+user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse", "Patient"]))
 
 
 @router.post(
@@ -38,7 +39,7 @@ async def assign_service_to_nurse(
 ):
     """
     Assigns multiple services to a specific nurse using a single bulk request.
-    Only nurses can assign services to themselves; admins can assign to any nurse.
+    Only nurses can assign services to themselves. 
     """
     try:
         bulk_response = service.assign_service_to_nurse(
@@ -58,6 +59,7 @@ async def assign_service_to_nurse(
 @router.get(
     "/{nurse_id}/services",
     response_model=NurseServicesResponse,
+    dependencies=[user_dependency],
     summary="Get all services offered by a nurse"
 )
 async def get_nurse_services(

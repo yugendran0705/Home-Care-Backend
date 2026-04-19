@@ -29,7 +29,7 @@ class NurseServiceRegistrationItem(BaseModel):
     """Represents a group of service IDs to register for a nurse."""
     service_ids: List[uuid.UUID] = Field(
         ..., 
-        min_items=1,
+        min_length=1,
         description="The list of service IDs to register for this nurse."
     )
 

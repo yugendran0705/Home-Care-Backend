@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 # Import necessary components
 from repositories.nurses import NurseRepository
 from repositories.nurse_services import NurseServiceRepository
-from repositories.address import AddressRepository
 from repositories.nurse_documents import NurseDocumentRepository # Import the new repository
 from repositories.services import ServiceRepository  # <- for validating service IDs during registration
 from services.users import UserService

@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from repositories.nurse_services import NurseServiceRepository
 from repositories.nurses import NurseRepository
 from repositories.services import ServiceRepository
-import models
 from schemas.nurses import NurseResponse
 from schemas.nurse_services import (
     NurseServiceBulkCreate,
@@ -19,7 +18,7 @@ from schemas.nurse_services import (
 from schemas.services import ServiceResponse
 
 
-class NurseServiceService:
+class NurseAssociateService:
     """
     Service layer for handling all business logic related to Nurse-Service associations.
     """
@@ -176,18 +175,12 @@ class NurseServiceService:
                 detail=f"Service(s) with ID(s) {missing_services} not found."
             )
 
-        # Delete all existing services for this nurse
-        self.nurse_service_repo.delete_all_by_nurse(nurse_id=nurse_id)
-
-        # Bulk create the new services (only if there are services to add)
-        if unique_service_ids:
-            result = self.nurse_service_repo.bulk_create_for_nurse(
-                nurse_id=nurse_id,
-                service_ids=unique_service_ids
-            )
-            service_items = [ServiceResponse.model_validate(ns.service) for ns in result]
-        else:
-            service_items = []
+        # Atomically replace all services in a single transaction
+        result = self.nurse_service_repo.replace_services_for_nurse(
+            nurse_id=nurse_id,
+            service_ids=unique_service_ids
+        )
+        service_items = [ServiceResponse.model_validate(ns.service) for ns in result]
 
         return NurseServicesResponse(
             nurse=NurseResponse.model_validate(nurse),

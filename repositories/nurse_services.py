@@ -155,3 +155,62 @@ class NurseServiceRepository:
             selectinload(models.NurseService.service)
         )
         return self.db.execute(statement).scalars().all()
+    
+    def replace_services_for_nurse(
+        self,
+        *,
+        nurse_id: uuid.UUID,
+        service_ids: List[uuid.UUID]
+    ) -> List[models.NurseService]:
+        """
+        Atomically replaces all services for a nurse in a single transaction.
+        Deletes existing associations and creates new ones without intermediate commits.
+
+        Args:
+            nurse_id (uuid.UUID): The ID of the nurse.
+            service_ids (List[uuid.UUID]): List of service IDs to assign to the nurse.
+
+        Returns:
+            List[models.NurseService]: The newly created NurseService associations.
+        
+        Raises:
+            Exception: If there's a database integrity error (e.g., duplicate entries, invalid IDs).
+        """
+        try:
+            # Delete existing associations
+            self.db.query(models.NurseService)\
+                .filter(models.NurseService.nurse_id == nurse_id)\
+                .delete(synchronize_session=False)
+            
+            # Create new associations if any service_ids provided
+            if service_ids:
+                db_nurse_services = []
+                for service_id in service_ids:
+                    db_nurse_services.append(
+                        models.NurseService(
+                            nurse_id=nurse_id,
+                            service_id=service_id
+                        )
+                    )
+                self.db.add_all(db_nurse_services)
+            
+            # Single commit for both operations
+            self.db.commit()
+            
+            # Fetch the created records with relationships loaded
+            if service_ids:
+                statement = select(models.NurseService).options(
+                    selectinload(models.NurseService.nurse),
+                    selectinload(models.NurseService.service)
+                ).where(
+                    and_(
+                        models.NurseService.nurse_id == nurse_id,
+                        models.NurseService.service_id.in_(service_ids)
+                    )
+                )
+                return self.db.execute(statement).scalars().all()
+            else:
+                return []
+        except Exception:
+            self.db.rollback()
+            raise

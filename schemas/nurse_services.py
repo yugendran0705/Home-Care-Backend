@@ -1,8 +1,7 @@
 # /schemas/nurse_service.py
 
 import uuid
-from typing import List, Optional
-from decimal import Decimal
+from typing import List
 
 from pydantic import BaseModel, Field
 

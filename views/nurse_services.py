@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 # Import dependencies, services, models, and schemas
 from config.database import get_db
 from utils.roleChecker import RoleChecker
-from services.nurse_services import NurseServiceService
+from services.nurse_services import NurseAssociateService
 import models
 from schemas.nurse_services import NurseServiceBulkCreate, NurseServicesResponse
 
@@ -16,9 +16,9 @@ router = APIRouter(
     tags=["Nurse Services"]
 )
 
-# Dependency to provide the NurseServiceService
-def get_nurse_service_associate(db=Depends(get_db)) -> NurseServiceService:
-    return NurseServiceService(db)
+# Dependency to provide the NurseAssociateService
+def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociateService:
+    return NurseAssociateService(db)
 
 # Define role-based access dependencies
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
@@ -34,7 +34,7 @@ admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 async def assign_service_to_nurse(
     service_in: NurseServiceBulkCreate,
     current_user: models.User = nurse_dependency,
-    service: NurseServiceService = Depends(get_nurse_service_associate)
+    service: NurseAssociateService = Depends(get_nurse_service_associate)
 ):
     """
     Assigns multiple services to a specific nurse using a single bulk request.
@@ -42,7 +42,7 @@ async def assign_service_to_nurse(
     """
     try:
         bulk_response = service.assign_service_to_nurse(
-            nurse_id=current_user.id if current_user.user_type == "Nurse" else None,
+            nurse_id=current_user.id,
             nurse_service_in=service_in
         )
         return bulk_response
@@ -62,7 +62,7 @@ async def assign_service_to_nurse(
 )
 async def get_nurse_services(
     nurse_id: uuid.UUID,
-    service: NurseServiceService = Depends(get_nurse_service_associate)
+    service: NurseAssociateService = Depends(get_nurse_service_associate)
 ):
     """
     Retrieves all services offered by a specific nurse.
@@ -80,16 +80,15 @@ async def get_nurse_services(
 
 
 @router.put(
-    "/{nurse_id}/services",
+    "/services",
     response_model=NurseServicesResponse,
     summary="Update services for a nurse",
     status_code=status.HTTP_200_OK
 )
-async def update_nurse_service_price(
-    nurse_id: uuid.UUID,
+async def update_nurse_services(
     service_in: NurseServiceBulkCreate,
     current_user: models.User = nurse_dependency,
-    service: NurseServiceService = Depends(get_nurse_service_associate)
+    service: NurseAssociateService = Depends(get_nurse_service_associate),
 ):
     """
     Updates the services offered by a nurse.
@@ -97,7 +96,7 @@ async def update_nurse_service_price(
     """
     try:
         updated_association = service.update_services_for_nurse(
-            nurse_id=nurse_id,
+            nurse_id=current_user.id,
             service_ids=service_in.service_ids,
         )
         return NurseServicesResponse.model_validate(updated_association)
@@ -118,17 +117,17 @@ async def update_nurse_service_price(
 )
 async def remove_service_from_nurse(
     nurse_id: uuid.UUID,
-    service: NurseServiceService = Depends(get_nurse_service_associate)
+    service: NurseAssociateService = Depends(get_nurse_service_associate)
 ):
     """
     Removes all services from a specific nurse's profile.
     Only admins can perform this action.
     """
     try:
-        count = service.remove_service_from_nurse(
+        service.remove_service_from_nurse(
             nurse_id=nurse_id
         )
-        return {"detail": f"Successfully removed {count} service(s) from nurse."}
+        return {"detail": "Successfully removed all services from nurse."}
     except HTTPException as e:
         raise e
     except Exception as e:

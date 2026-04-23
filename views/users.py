@@ -24,6 +24,7 @@ def get_user_service(db=Depends(get_db)) -> UserService:
 patient_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient"]))
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
 admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
+user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse", "Patient"]))
 
 @router.post(
     "/",
@@ -45,12 +46,9 @@ def register_new_user(
             user_type=user_in.user_type
         )
         return created_user
-    except ValueError as e:
-        print(f"Value Error in user registration: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e)
-        )
+    except HTTPException as e:
+        print(f"HTTP Error in user registration: {e.detail}")
+        raise e
     except Exception as e:
         print(f"Unexpected Error in user registration: {e}")
         raise HTTPException(
@@ -130,7 +128,7 @@ def refresh_token(
 @router.get("/me", response_model=UserResponse, summary="Get current user's profile")
 def get_my_profile(
     service: UserService = Depends(get_user_service),
-    user: models.User = patient_dependency
+    user: models.User = user_dependency
 ):
     """
     Retrieves the profile of the currently logged-in user.

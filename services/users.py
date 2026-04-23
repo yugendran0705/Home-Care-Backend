@@ -48,7 +48,7 @@ class UserService:
         existing_user = self.user_repo.get_user_by_email(email)
         if existing_user:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="Email already registered."
             )
         

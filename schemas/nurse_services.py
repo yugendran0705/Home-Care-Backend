@@ -1,8 +1,7 @@
 # /schemas/nurse_service.py
 
 import uuid
-from typing import Optional
-from decimal import Decimal
+from typing import List
 
 from pydantic import BaseModel, Field
 
@@ -15,33 +14,24 @@ class NurseServiceBase(BaseModel):
     """
     Base schema for the nurse-service link.
     """
-    nurse_id: uuid.UUID
     service_id: uuid.UUID
-    price: Optional[Decimal] = Field(
-        None,
-        gt=0,
-        decimal_places=2,
-        description="A custom price for this service by this specific nurse. If null, the service's base price is used.",
-        examples=[650.00]
+
+class NurseServiceBulkCreate(BaseModel):
+    """
+    Schema for assigning multiple services to a single nurse.
+    """
+    service_ids: List[uuid.UUID] = Field(
+        ...,
+        min_length=1,
+        description="A list of service IDs to link to the nurse."
     )
 
-
-class NurseServiceCreate(NurseServiceBase):
+class NurseServicesResponse(BaseModel):
     """
-    Schema for linking a service to a nurse.
+    Nested response schema containing nurse profile and service list.
     """
-    pass
-
-
-class NurseServiceResponse(NurseServiceBase):
-    """
-    Schema for returning the nurse-service link from the API.
-    This provides full details of both the nurse and the service.
-    """
-    # Nest the full response schemas for nurse and service
     nurse: NurseResponse
-    service: ServiceResponse
+    services: List[ServiceResponse]
 
     class Config:
         from_attributes = True
-

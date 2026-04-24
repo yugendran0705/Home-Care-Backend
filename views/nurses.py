@@ -10,6 +10,7 @@ from utils.roleChecker import RoleChecker
 from services.nurses import NurseService
 import models
 from schemas.nurses import *
+from schemas.nurse_services import NurseServicesResponse
 from schemas.nurse_documents import *
 
 # Create API router
@@ -29,7 +30,7 @@ admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 
 @router.post(
     "/register",
-    response_model=NurseCreateResponse,
+    response_model=NurseServicesResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new nurse"
 )
@@ -96,7 +97,7 @@ def upload_nurse_document(
 
 
 @router.get("/me", 
-            response_model=NurseResponse, 
+            response_model=NurseServicesResponse, 
             summary="Get current nurse's profile",
             status_code=status.HTTP_200_OK)
 def get_my_profile(

@@ -16,9 +16,11 @@ from repositories.services import ServiceRepository  # <- for validating service
 from services.users import UserService
 from services.address import AddressService
 import models
-from schemas.nurses import NurseCreate
+from schemas.nurses import NurseCreate, NurseResponse
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
+from schemas.nurse_services import NurseServicesResponse
+from schemas.services import ServiceResponse
 from config.security import create_access_token, create_refresh_token
 
 
@@ -129,17 +131,16 @@ class NurseService:
                 )
             
             self.db.refresh(new_nurse)
-            token_data = {
-                "id": str(new_user.id)
-            }
             
-            access_token = create_access_token(data=token_data)
-            refresh_token = create_refresh_token(data=token_data)
-            return {
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-                "nurse": new_nurse
-            }
+            # Get services for the newly created nurse
+            nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=new_nurse.id)
+            service_items = [ServiceResponse.model_validate(ns.service) for ns in nurse_services]
+            
+            # Return NurseServicesResponse
+            return NurseServicesResponse(
+                nurse=NurseResponse.model_validate(new_nurse),
+                services=service_items
+            )
 
         
         except Exception as e:
@@ -184,9 +185,9 @@ class NurseService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-    def get_nurse_profile(self, nurse_id: uuid.UUID) -> models.Nurse:
+    def get_nurse_profile(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
-        Retrieves a nurse's profile by their ID.
+        Retrieves a nurse's profile by their ID along with their services.
         """
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
         if not nurse:
@@ -194,7 +195,15 @@ class NurseService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Nurse not found."
             )
-        return nurse
+        
+        # Get services for the nurse
+        nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
+        service_items = [ServiceResponse.model_validate(ns.service) for ns in nurse_services]
+        
+        return NurseServicesResponse(
+            nurse=NurseResponse.model_validate(nurse),
+            services=service_items
+        )
 
     def update_nurse_profile(
         self, nurse_id: uuid.UUID, updates: Dict[str, Any]

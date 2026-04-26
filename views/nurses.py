@@ -12,6 +12,8 @@ import models
 from schemas.nurses import *
 from schemas.nurse_services import NurseServicesResponse
 from schemas.nurse_documents import *
+from repositories.services import ServiceRepository
+from services.nurse_services import NurseAssociateService
 
 # Create API router
 router = APIRouter(
@@ -23,6 +25,10 @@ router = APIRouter(
 def get_nurse_service(db=Depends(get_db)) -> NurseService:
     return NurseService(db)
 
+def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociateService:
+    return NurseAssociateService(db)
+
+
 # Define role-based access dependencies
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
 admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
@@ -30,7 +36,7 @@ admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 
 @router.post(
     "/register",
-    response_model=NurseServicesResponse,
+    response_model=NurseCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new nurse"
 )
@@ -44,7 +50,9 @@ async def register_new_nurse(
     """
     try:
         created_nurse = service.create_nurse_and_user_account(nurse_in=nurse_in)
+        
         return created_nurse
+    
     except HTTPException as e:
         print(f"An unexpected error occurred during nurse registration: {e}")
         raise e
@@ -102,13 +110,13 @@ def upload_nurse_document(
             status_code=status.HTTP_200_OK)
 def get_my_profile(
     current_user: models.User = nurse_dependency,
-    service: NurseService = Depends(get_nurse_service)
+    service: NurseAssociateService = Depends(get_nurse_service_associate)
 ):
     """
     Retrieves the profile for the currently authenticated nurse.
     """
     try:
-        nurse_profile = service.get_nurse_profile(nurse_id=current_user.id)
+        nurse_profile = service.get_services_for_nurse(nurse_id=current_user.id)
         if not nurse_profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nurse profile not found.")
         return nurse_profile
@@ -248,4 +256,3 @@ def verify_nurse_account(
             detail="An unexpected error occurred while verifying nurse account."
         )
 
-    

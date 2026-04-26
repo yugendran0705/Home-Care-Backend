@@ -80,10 +80,17 @@ class NurseService:
                             detail=f"Duplicate service_id detected: {service_id}"
                         )
 
-                    if not self.service_repo.get_by_id(service_id=service_id):
+                    service = self.service_repo.get_by_id(service_id=service_id)
+                    if not service:
                         raise HTTPException(
                             status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Service with ID {service_id} not found."
+                        )
+
+                    if not service.is_active:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Service with ID {service_id} is not active and cannot be assigned."
                         )
 
                     service_ids.append(service_id)

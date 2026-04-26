@@ -80,6 +80,19 @@ class NurseAssociateService:
                 detail=f"Service(s) with ID(s) {missing_services} not found."
             )
 
+        # Validate that every service is active
+        inactive_services = []
+        for service_id in unique_service_ids:
+            service = self.service_repo.get_by_id(service_id=service_id)
+            if service and not service.is_active:
+                inactive_services.append(service_id)
+
+        if inactive_services:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Service(s) with ID(s) {inactive_services} are not active and cannot be assigned."
+            )
+
         # Ensure none of the services are already assigned to this nurse
         duplicate_assignments = []
         for service_id in unique_service_ids:
@@ -173,6 +186,19 @@ class NurseAssociateService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Service(s) with ID(s) {missing_services} not found."
+            )
+
+        # Validate that every service is active
+        inactive_services = []
+        for service_id in unique_service_ids:
+            service = self.service_repo.get_by_id(service_id=service_id)
+            if service and not service.is_active:
+                inactive_services.append(service_id)
+
+        if inactive_services:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Service(s) with ID(s) {inactive_services} are not active and cannot be assigned."
             )
 
         # Atomically replace all services in a single transaction

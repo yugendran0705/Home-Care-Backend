@@ -16,8 +16,8 @@ class ServiceBase(BaseModel):
     base_price: Decimal = Field(..., gt=0, decimal_places=2, examples=[500.00])
     duration : int = Field(..., gt=0, description="Duration of the service in minutes.", examples=[60])
     duration_type: str = Field(..., max_length=50, description="Type of duration (e.g., minutes, hours).", examples=["minutes"])
-    is_active: Optional[bool] = Field(True, description="Indicates if the service is currently active.")
-    is_qualified: Optional[bool] = Field(False, description="Indicates if the service has been soft-deleted.")
+    is_active: Optional[bool] = Field(True, description="Indicates if the service is currently active or has been soft-deleted.")
+    is_qualified: Optional[bool] = Field(False, description="Indicates if the nurse is qualified to perform this service.")
 
 
 class ServiceCreate(ServiceBase):

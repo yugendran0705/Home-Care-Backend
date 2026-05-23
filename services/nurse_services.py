@@ -1,7 +1,6 @@
 # /services/nurse_services.py
 
 import json
-import json
 import uuid
 from typing import List
 
@@ -23,7 +22,7 @@ from utils.redis import delete_cache
 import logging
 logger = logging.getLogger(__name__)
 
-from utils.redis import get_cache, set_cache, delete_cache, NURSE_SERVICES_CACHE_TTL
+from utils.redis import get_cache, set_cache, delete_cache, NURSE_CACHE_TTL
 
 
 class NurseAssociateService:
@@ -138,24 +137,7 @@ class NurseAssociateService:
 
         Raises:
             HTTPException: If nurse not found.
-        """
-        cache_key = f"nurse_services_{nurse_id}"
-
-        cached_data = get_cache(cache_key)
-        if cached_data:
-            try:
-                # Deserialize JSON to dict and create Pydantic model
-                cached_dict = json.loads(cached_data.decode('utf-8'))
-                cached_model = NurseServicesResponse(**cached_dict)
-                logger.debug(f"Cache hit for nurse services with key {nurse_id}")
-                return cached_model
-            except Exception as e:
-                logger.warning(f"Failed to deserialize cache for nurse {nurse_id}: {e}")
-                delete_cache(cache_key)
-                
-
-        logger.debug(f"fetching nurse services from database for nurse {nurse_id}")
-        # Fetch from database
+        """        
 
         # Validate that nurse exists
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
@@ -171,13 +153,6 @@ class NurseAssociateService:
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )
-        try:
-            cached_json = json.dumps(nurse_services_response.model_dump(mode='json')).encode('utf-8')
-            if set_cache(cache_key, cached_json, ex=NURSE_SERVICES_CACHE_TTL):
-                logger.debug(f"Cached nurse services for nurse {nurse_id} as JSON with {NURSE_SERVICES_CACHE_TTL}s TTL")
-        except Exception as e:
-            logger.warning(f"Failed to cache nurse services for nurse {nurse_id}: {e}")
-
         return nurse_services_response
 
     def update_services_for_nurse(self, nurse_id: uuid.UUID, service_ids: List[uuid.UUID]) -> NurseServicesResponse:
@@ -241,21 +216,12 @@ class NurseAssociateService:
         )
         service_items = [ServiceResponse.model_validate(ns.service) for ns in result]
 
-<<<<<<< HEAD
-        nurse_services_response = NurseServicesResponse(
-=======
         delete_cache(f"user_{nurse_id}")
 
         return NurseServicesResponse(
->>>>>>> bc6a694 (Caching for Nurse)
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
-        )
-
-        # Invalidate cache for this nurse's services
-        delete_cache(f"nurse_services_{nurse_id}")
-
-        return nurse_services_response
+        )        
     
     def remove_service_from_nurse(self, nurse_id: uuid.UUID) -> bool:
         """
@@ -279,11 +245,6 @@ class NurseAssociateService:
             )
 
         self.nurse_service_repo.delete_all_by_nurse(nurse_id=nurse_id)
-<<<<<<< HEAD
-        # Invalidate cache for this nurse's services
-        delete_cache(f"nurse_services_{nurse_id}")
-=======
         delete_cache(f"user_{nurse_id}")
->>>>>>> bc6a694 (Caching for Nurse)
         return True
         

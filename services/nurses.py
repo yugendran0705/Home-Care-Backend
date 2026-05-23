@@ -22,6 +22,7 @@ from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from schemas.nurse_services import NurseServicesResponse
 from schemas.services import ServiceResponse
 from config.security import create_access_token, create_refresh_token
+from utils.redis import delete_cache
 
 
 
@@ -145,6 +146,7 @@ class NurseService:
 
             access_token = create_access_token(data=token_data)
             refresh_token = create_refresh_token(data=token_data)
+            
             return NurseCreateResponse(
                 access_token=access_token,
                 refresh_token=refresh_token,
@@ -223,6 +225,7 @@ class NurseService:
             )
 
         updated_nurse = self.nurse_repo.update(nurse_id=nurse.id, updates=updates)
+        delete_cache(f"nurse_services_{nurse_id}")
         return updated_nurse
 
     def deactivate_nurse_account(self, nurse_id: uuid.UUID) -> bool:
@@ -242,4 +245,5 @@ class NurseService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Nurse account is already verified."
             )
+        delete_cache(f"nurse_services_{nurse_id}")
         return self.nurse_repo.update(nurse_id=nurse.id, updates={"is_verified": True})

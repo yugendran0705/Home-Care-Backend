@@ -1,7 +1,9 @@
 
 # /services/services.py
-
+# adding in comments for personal notes
 import uuid
+import json #converting str to dicts and vice versa
+import logging #linking to central logging pipeline
 from typing import List, Optional, Dict, Any
 
 from fastapi import HTTPException, status
@@ -9,8 +11,11 @@ from sqlalchemy.orm import Session
 
 from repositories.services import ServiceRepository
 import models
-from schemas.services import ServiceCreate, ServiceUpdate
+from schemas.services import ServiceCreate, ServiceUpdate, ServiceResponse  
 
+from utils.redis import get_cache, set_cache, delete_cache, SERVICE_CACHE_TTL
+logger = logging.getLogger(__name__) #logging
+CACHE_KEY_PREFIX = "service:profile:" #service prefix string defn
 
 class ServiceService:
     """
@@ -58,54 +63,73 @@ class ServiceService:
                 detail=f"An unexpected error occurred: {e}",
             )
 
-    def get_service_by_id(self, *, service_id: uuid.UUID) -> models.Service:
+    def get_service_by_id(self, *, service_id: uuid.UUID) -> ServiceResponse:
         """
-        Retrieves a service by its ID.
+        Retrieves a service by its ID, checks redis cache first
 
-        Args:
-            service_id (uuid.UUID): The ID of the service to retrieve.
-
-        Returns:
-            models.Service: The service object.
-
-        Raises:
-            HTTPException: If the service is not found.
         """
+        cache_key = f"{CACHE_KEY_PREFIX}{service_id}"
+
+        #lookup index key in redis ram
+        cached_data = get_cache(cache_key)
+        if cached_data:
+            try:
+                service_dict = json.loads(cached_data.decode('utf-8'))
+                service_response = ServiceResponse(**service_dict)
+                logger.debug(f"Cache hit for service {service_id}")
+                return service_response
+            except Exception as e:
+                logger.warning(f"Failed to deserialize cached service for ID {service_id}: {e}")
+
+        #cache missed, fallback to pg db query
+        logger.debug(f"Fetching service for ID {service_id} from database")
         service = self.service_repo.get_by_id(service_id=service_id)
         if not service:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service not found.",
             )
-        return service
+
+        # 3. sqlalchemy db obj to pydantic model
+        service_response = ServiceResponse.model_validate(service, from_attributes=True)
+        
+        # 4. save data into redis, fast retrieval 
+        try:
+            cached_json = json.dumps(service_response.model_dump(mode='json')).encode('utf-8')
+            if set_cache(cache_key, cached_json, ex=SERVICE_CACHE_TTL):
+                logger.debug(f"Cached service {service_id} as JSON with {SERVICE_CACHE_TTL}s TTL")
+        except Exception as e:
+            logger.warning(f"Failed to cache service {service_id}: {e}")
+            
+        return service_response
 
     def update_service(
-        self, *, service_id: uuid.UUID, updates: ServiceUpdate
-    ) -> models.Service:
-        """
-        Updates an existing service.
+            self, *, service_id: uuid.UUID, updates: ServiceUpdate
+        ) -> models.Service:
+            """
+            Updates an existing service and invalidates its cache.
+            """
+            # fetch directly from db to editable orm obj
+            service = self.service_repo.get_by_id(service_id=service_id)
+            if not service:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Service not found.",
+                )
+            update_data = updates.model_dump(exclude_unset=True)
+            if not update_data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No update data provided.",
+                )
 
-        Args:
-            service_id (uuid.UUID): The ID of the service to update.
-            updates (ServiceUpdate): The data to update.
+            # data update in sql
+            updated_service = self.service_repo.update(service_id=service_id, updates=update_data)
 
-        Returns:
-            models.Service: The updated service object.
-        """
-        # First, ensure the service exists
-        self.get_service_by_id(service_id=service_id)
+            #clear stale, out of date cache  out of redis ram
+            delete_cache(f"{CACHE_KEY_PREFIX}{service_id}")
 
-        # Exclude unset fields from the update data
-        update_data = updates.model_dump(exclude_unset=True)
-
-        if not update_data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No update data provided.",
-            )
-
-        updated_service = self.service_repo.update(service_id=service_id, updates=update_data)
-        return updated_service
+            return updated_service
 
     def list_all_services(self, *, skip: int = 0, limit: int = 100) -> List[models.Service]:
         """
@@ -122,25 +146,24 @@ class ServiceService:
 
     def delete_service(self, *, service_id: uuid.UUID) -> Dict[str, str]:
         """
-        Deletes a service. In a real-world application, this should
-        likely be a "soft delete" (e.g., setting `is_active` to False).
-
-        Args:
-            service_id (uuid.UUID): The ID of the service to delete.
-
-        Returns:
-            Dict[str, str]: A confirmation message.
+        Deletes a service and completely clears its cache instance.
         """
-        # Ensure the service exists before trying to delete
-        self.get_service_by_id(service_id=service_id)
+        # check directly from db to prevent stale
+        service = self.service_repo.get_by_id(service_id=service_id)
+        if not service:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Service not found.",
+            )
 
         deleted_service = self.service_repo.delete(service_id=service_id)
         if not deleted_service:
-            # This case should ideally not be hit due to the check above, but it's good practice
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service not found.",
             )
             
-        return {"message": f"Service with ID {service_id} has been deleted."}
+        # Clear the cache index so no ghost records remain in RAM memory
+        delete_cache(f"{CACHE_KEY_PREFIX}{service_id}")
 
+        return {"message": f"Service with ID {service_id} has been deleted."}

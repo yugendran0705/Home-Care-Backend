@@ -1,6 +1,7 @@
 # /services/nurses.py
 
 import uuid
+import json
 from typing import Optional, Dict, Any
 from fastapi import UploadFile
 import shutil # Used for file operations
@@ -22,7 +23,14 @@ from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from schemas.nurse_services import NurseServicesResponse
 from schemas.services import ServiceResponse
 from config.security import create_access_token, create_refresh_token
+<<<<<<< HEAD
 from utils.redis import delete_cache
+=======
+from utils.redis import set_cache, get_cache, delete_cache, NURSE_CACHE_TTL
+
+import logging
+logger = logging.getLogger(__name__)
+>>>>>>> bc6a694 (Caching for Nurse)
 
 
 
@@ -197,17 +205,50 @@ class NurseService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-    def get_nurse_profile(self, nurse_id: uuid.UUID) -> models.Nurse:
+    def get_nurse_profile(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
         Retrieves a nurse's profile by their ID along with their services.
         """
+
+        cache_key = f"user_{nurse_id}"
+
+        cached_data = get_cache(cache_key)
+        if cached_data:
+            try:
+                nurse_dict = json.loads(cached_data.decode('utf-8'))
+                nurse_response = NurseServicesResponse(**nurse_dict)
+                logger.debug(f"Cache hit for user {nurse_id}")
+                return nurse_response
+        
+            except Exception as e:
+                logger.warning(f"Failed to deserialize cached nurse for user {nurse_id}: {e}")
+
+        logger.debug(f"Fetching nurse for user {nurse_id} from database")
+
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
         if not nurse:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Nurse not found."
             )
-        return nurse
+        
+        nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
+        service_items = [ServiceResponse.model_validate(ns.service) for ns in nurse_services]
+        # Convert to Pydantic model
+        nurse_profile_response =  NurseServicesResponse(
+            nurse=NurseResponse.model_validate(nurse),
+            services=service_items,
+        )
+        # Cache the result
+        try:
+            cached_json = json.dumps(nurse_profile_response.model_dump(mode = "json")).encode('utf-8')
+            if set_cache(cache_key, cached_json, ex=NURSE_CACHE_TTL):
+                logger.debug(f"Cached nurse profile for user {nurse_id} as json with TTL {NURSE_CACHE_TTL} seconds")
+        except Exception as e:
+            logger.warning(f"Failed to cache nurse profile for user {nurse_id}: {e}")
+
+
+        return nurse_profile_response
         
 
     def update_nurse_profile(
@@ -225,7 +266,11 @@ class NurseService:
             )
 
         updated_nurse = self.nurse_repo.update(nurse_id=nurse.id, updates=updates)
+<<<<<<< HEAD
         delete_cache(f"nurse_services_{nurse_id}")
+=======
+        delete_cache(f"user_{nurse_id}")
+>>>>>>> bc6a694 (Caching for Nurse)
         return updated_nurse
 
     def deactivate_nurse_account(self, nurse_id: uuid.UUID) -> bool:
@@ -233,6 +278,7 @@ class NurseService:
         Deactivates a nurse's account (soft delete).
         """
         self.get_nurse_profile(nurse_id)
+        delete_cache(f"user_{nurse_id}")
         return self.user_service.deactivate_user(user_id=nurse_id)
 
     def verify_nurse_account(self, nurse_id: uuid.UUID) -> models.Nurse:

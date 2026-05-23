@@ -110,13 +110,13 @@ def upload_nurse_document(
             status_code=status.HTTP_200_OK)
 def get_my_profile(
     current_user: models.User = nurse_dependency,
-    service: NurseAssociateService = Depends(get_nurse_service_associate)
+    service: NurseService = Depends(get_nurse_service)
 ):
     """
     Retrieves the profile for the currently authenticated nurse.
     """
     try:
-        nurse_profile = service.get_services_for_nurse(nurse_id=current_user.id)
+        nurse_profile = service.get_nurse_profile(nurse_id=current_user.id)
         if not nurse_profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nurse profile not found.")
         return nurse_profile

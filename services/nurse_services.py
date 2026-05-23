@@ -18,6 +18,7 @@ from schemas.nurse_services import (
     NurseServicesResponse,
 )
 from schemas.services import ServiceResponse
+from utils.redis import delete_cache
 
 import logging
 logger = logging.getLogger(__name__)
@@ -240,7 +241,13 @@ class NurseAssociateService:
         )
         service_items = [ServiceResponse.model_validate(ns.service) for ns in result]
 
+<<<<<<< HEAD
         nurse_services_response = NurseServicesResponse(
+=======
+        delete_cache(f"user_{nurse_id}")
+
+        return NurseServicesResponse(
+>>>>>>> bc6a694 (Caching for Nurse)
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )
@@ -272,7 +279,11 @@ class NurseAssociateService:
             )
 
         self.nurse_service_repo.delete_all_by_nurse(nurse_id=nurse_id)
+<<<<<<< HEAD
         # Invalidate cache for this nurse's services
         delete_cache(f"nurse_services_{nurse_id}")
+=======
+        delete_cache(f"user_{nurse_id}")
+>>>>>>> bc6a694 (Caching for Nurse)
         return True
         

@@ -15,7 +15,7 @@ from schemas.services import ServiceCreate, ServiceUpdate, ServiceResponse
 
 from utils.redis import get_cache, set_cache, delete_cache, SERVICE_CACHE_TTL
 logger = logging.getLogger(__name__) #logging
-CACHE_KEY_PREFIX = "service:profile:" #service prefix string defn
+CACHE_KEY_PREFIX = "service_profile_" #service prefix string defn
 
 class ServiceService:
     """

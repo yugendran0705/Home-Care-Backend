@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy import func
 
 # Adjust the import path based on your project structure
 import models
@@ -123,3 +124,10 @@ class NurseRepository:
         self.db.delete(db_nurse)
         self.db.commit()
         return db_nurse
+
+    def get_by_distance(self,*,patient:models.Patient,radius:int=8000,skip:int,limit:int)->List[models.Nurse]:
+        patient_locn = patient.primary_address.location
+        print(func.ST_DWithin(patient_locn,patient_locn,80))
+        nearby_nurses = self.db.query(models.Nurse).join(models.Nurse.primary_address).filter(models.Nurse.address_id != None).filter(func.ST_DWithin(models.Address.location, patient_locn, radius)).offset(skip).limit(limit).all()
+         
+        return nearby_nurses

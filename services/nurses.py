@@ -7,6 +7,7 @@ import shutil # Used for file operations
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List
 
 # Import necessary components
 from repositories.nurses import NurseRepository
@@ -184,4 +185,10 @@ class NurseService:
                 detail="Nurse account is already verified."
             )
         return self.nurse_repo.update(nurse_id=nurse.id, updates={"is_verified": True})
+    
+    def get_nurses_by_distance(self,patient:models.Patient,radius:int=8000,skip:int=0,limit:int=100)->List[models.Nurse]:
+        if(patient.primary_address is None):
+            raise ValueError("Patient doesnt have a primary address!")
+        nearby_nurses = self.nurse_repo.get_by_distance(patient=patient,radius=radius,skip=skip,limit=limit)
+        return nearby_nurses
     

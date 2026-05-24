@@ -15,6 +15,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func  # For default=func.now()
+from geoalchemy2 import Geography
+from sqlalchemy import Index
+
 
 Base = declarative_base()
 
@@ -125,13 +128,20 @@ class Address(Base):
     country = Column(String(100), nullable=False, default="India")
     latitude = Column(Numeric(10, 8), nullable=True)  # Nullable
     longitude = Column(Numeric(11, 8), nullable=True)  # Nullable
+    location = Column(Geography(geometry_type="POINT", srid=4326),nullable=True)
     is_primary = Column(Boolean, nullable=False, default=False)
 
     # Relationships
     user = relationship("User", back_populates="addresses")
     # No direct relationship to Patient/Nurse here as they have foreign keys to Address.id
     # Bookings relationship is handled from Booking side
-
+    __table_args__ = (
+    Index(
+        "idx_addresses_location",
+        "location",
+        postgresql_using="gist"
+    ),
+    )
 
 class Service(Base):
     __tablename__ = "services"

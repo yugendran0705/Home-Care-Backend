@@ -104,3 +104,4 @@ class BookingService:
     def delete_booking(self, *, booking_id: uuid.UUID) -> Optional[models.Booking]:
         """Deletes a booking by its ID"""
         deleted_booking = self.booking_repo.delete(booking_id=booking_id)
+        return deleted_booking

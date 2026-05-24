@@ -25,6 +25,7 @@ def get_nurse_service(db=Depends(get_db)) -> NurseService:
 # Define role-based access dependencies
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
 admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
+patient_dependency = Depends(RoleChecker(allowed_roles=["Patient","Admin"]))
 
 
 @router.post(
@@ -247,4 +248,28 @@ def verify_nurse_account(
             detail="An unexpected error occurred while verifying nurse account."
         )
 
+@router.get(
+    "/distance",
+    response_model = List[NurseResponse],
+    summary="Retrieve a list of nurses who are within a specified radius of the patient",
+)
+def get_nurses_by_distance(
+    current_user : models.User=patient_dependency,
+    service:NurseService =  Depends(get_nurse_service),
+    radius:int = 8000,
+    skip:int = 0,
+    limit:int = 100
+):
+    try:
+
+        patient = current_user.patient
+        nearby_nurses = service.get_nurses_by_distance(patient=patient,radius=radius,skip=skip,limit=limit)
+        return nearby_nurses
+    except ValueError as e:
+        
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Primary address not found for patient")
+    except Exception as e:
+        print(e)
+        print(f"Unexpeted error while fetching nurses:{e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail="Unexpeted error in fetching nurses")
     

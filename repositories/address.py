@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-
+from sqlalchemy import func
 import models
 
 class AddressRepository:
@@ -21,6 +21,12 @@ class AddressRepository:
         Creates a new address record in the database.
         Expects a dictionary of address data.
         """
+        lat = address_data.get('latitude')
+        lon = address_data.get('longitude')
+        
+        if(lat is not None and lon is not None):
+            address_data['location'] = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+
         db_address = models.Address(**address_data)
         self.db.add(db_address)
         self.db.commit()

@@ -1,6 +1,4 @@
 # /services/nurse_services.py
-
-import json
 import uuid
 from typing import List
 
@@ -18,11 +16,6 @@ from schemas.nurse_services import (
 )
 from schemas.services import ServiceResponse
 from utils.redis import delete_cache
-
-import logging
-logger = logging.getLogger(__name__)
-
-from utils.redis import get_cache, set_cache, delete_cache, NURSE_CACHE_TTL
 
 
 class NurseAssociateService:

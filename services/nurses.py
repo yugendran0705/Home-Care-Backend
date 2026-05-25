@@ -219,6 +219,7 @@ class NurseService:
         
             except Exception as e:
                 logger.warning(f"Failed to deserialize cached nurse for user {nurse_id}: {e}")
+                delete_cache(cache_key)  # Remove the corrupted cache entry
 
         logger.debug(f"Fetching nurse for user {nurse_id} from database")
 
@@ -250,21 +251,27 @@ class NurseService:
 
     def update_nurse_profile(
         self, nurse_id: uuid.UUID, updates: Dict[str, Any]
-    ) -> models.Nurse:
+    ) -> NurseServicesResponse:
         """
         Updates a nurse's profile information.
         """
-        nurse = self.get_nurse_profile(nurse_id)
-        
-        if 'license_number' in updates and nurse.is_verified:
+        nurse_profile = self.get_nurse_profile(nurse_id)
+
+        if 'license_number' in updates and nurse_profile.nurse.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot change the license number of a verified nurse."
             )
 
-        updated_nurse = self.nurse_repo.update(nurse_id=nurse.id, updates=updates)
+        updated_nurse = self.nurse_repo.update(nurse_id=nurse_profile.nurse.id, updates=updates)
+        if not updated_nurse:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nurse not found."
+            )
+
         delete_cache(f"user_{nurse_id}")
-        return updated_nurse
+        return self.get_nurse_profile(nurse_id)
 
     def deactivate_nurse_account(self, nurse_id: uuid.UUID) -> bool:
         """
@@ -274,15 +281,23 @@ class NurseService:
         delete_cache(f"user_{nurse_id}")
         return self.user_service.deactivate_user(user_id=nurse_id)
 
-    def verify_nurse_account(self, nurse_id: uuid.UUID) -> models.Nurse:
+    def verify_nurse_account(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
         Verifies a nurse's account.
         """
-        nurse = self.get_nurse_profile(nurse_id)
-        if nurse.is_verified:
+        nurse_profile = self.get_nurse_profile(nurse_id)
+        if nurse_profile.nurse.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Nurse account is already verified."
             )
-        
-        return self.nurse_repo.update(nurse_id=nurse.id, updates={"is_verified": True})
+
+        updated_nurse = self.nurse_repo.update(nurse_id=nurse_id, updates={"is_verified": True})
+        if not updated_nurse:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nurse not found."
+            )
+
+        delete_cache(f"user_{nurse_id}")
+        return self.get_nurse_profile(nurse_id)

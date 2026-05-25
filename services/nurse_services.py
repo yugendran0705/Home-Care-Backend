@@ -142,11 +142,11 @@ class NurseAssociateService:
 
         nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
         service_items = [ServiceResponse.model_validate(ns.service) for ns in nurse_services]
-        nurse_services_response =NurseServicesResponse(
+        return NurseServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )
-        return nurse_services_response
+        
 
     def update_services_for_nurse(self, nurse_id: uuid.UUID, service_ids: List[uuid.UUID]) -> NurseServicesResponse:
         """

@@ -2,7 +2,7 @@
 
 import uuid
 import json
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from fastapi import UploadFile
 import shutil # Used for file operations
 
@@ -256,12 +256,6 @@ class NurseService:
         Updates a nurse's profile information.
         """
         nurse_profile = self.get_nurse_profile(nurse_id)
-
-        if 'license_number' in updates and nurse_profile.nurse.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot change the license number of a verified nurse."
-            )
 
         updated_nurse = self.nurse_repo.update(nurse_id=nurse_profile.nurse.id, updates=updates)
         if not updated_nurse:

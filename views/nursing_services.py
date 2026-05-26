@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 # Import dependencies, services, and schemas
 from config.database import get_db
 from utils.roleChecker import RoleChecker
-from services.services import ServiceService
-from schemas.services import ServiceCreate, ServiceUpdate, ServiceResponse
+from services.nursing_services import NursingServiceService
+from schemas.nursing_services import NursingServiceCreate, NursingServiceUpdate, NursingServiceResponse
 import models
 
 # Create API router
@@ -21,8 +21,8 @@ router = APIRouter(
 )
 
 # Dependency to provide the ServiceService
-def get_service_service(db: Session = Depends(get_db)) -> ServiceService:
-    return ServiceService(db)
+def get_service_service(db: Session = Depends(get_db)) -> NursingServiceService:
+    return NursingServiceService(db)
 
 # Define role-based access for admin-only endpoints
 admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
@@ -30,13 +30,13 @@ user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient", "Nurse"
 
 @router.post(
     "/",
-    response_model=ServiceResponse,
+    response_model=NursingServiceResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new service (Admin Access)"
 )
 def create_new_service(
-    service_in: ServiceCreate,
-    service: ServiceService = Depends(get_service_service),
+    service_in: NursingServiceCreate,
+    service: NursingServiceService = Depends(get_service_service),
     current_user: models.User = admin_dependency  # Enforce admin role
 ):
     """
@@ -47,14 +47,14 @@ def create_new_service(
 
 @router.get(
     "/all",
-    response_model=List[ServiceResponse],
+    response_model=List[NursingServiceResponse],
     summary="List all available services",
     status_code=status.HTTP_200_OK
 )
 def list_all_services(
     skip: int = 0,
     limit: int = 100,
-    service: ServiceService = Depends(get_service_service),
+    service: NursingServiceService = Depends(get_service_service),
 ):
     """
     Retrieves a paginated list of all services.
@@ -64,13 +64,13 @@ def list_all_services(
 
 @router.get(
     "/one/{service_id}",
-    response_model=ServiceResponse,
+    response_model=NursingServiceResponse,
     summary="Get a specific service by ID",
     status_code=status.HTTP_200_OK
 )
 def get_service_by_id(
     service_id: uuid.UUID,
-    service: ServiceService = Depends(get_service_service)
+    service: NursingServiceService = Depends(get_service_service)
 ):
     """
     Retrieves details for a specific service by its unique ID.
@@ -80,14 +80,14 @@ def get_service_by_id(
 
 @router.put(
     "/{service_id}",
-    response_model=ServiceResponse,
+    response_model=NursingServiceResponse,
     summary="Update a service (Admin Access)",
     status_code=status.HTTP_200_OK,
 )
 def update_existing_service(
     service_id: uuid.UUID,
-    service_update: ServiceUpdate,
-    service: ServiceService = Depends(get_service_service),
+    service_update: NursingServiceUpdate,
+    service: NursingServiceService = Depends(get_service_service),
     current_user: models.User = admin_dependency  # Enforce admin role
 ):
     """
@@ -104,7 +104,7 @@ def update_existing_service(
 )
 def delete_existing_service(
     service_id: uuid.UUID,
-    service: ServiceService = Depends(get_service_service),
+    service: NursingServiceService = Depends(get_service_service),
     current_user: models.User = admin_dependency  # Enforce admin role
 ):
     """

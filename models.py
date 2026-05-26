@@ -87,14 +87,16 @@ class Address(Base):
     # No direct relationship to Patient/Nurse here as they have foreign keys to Address.id
     # Bookings relationship is handled from Booking side
 
-class Service(Base):
-    __tablename__ = "services"
+class NursingService(Base):
+    __tablename__ = "nursing_services"
     id = Column("service_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     service_name = Column(String(100), unique=True, nullable=False)
     description = Column(Text, nullable=True) # Nullable
     base_price = Column(Numeric(10, 2), nullable=False, default=0.00) # DECIMAL(10,2) mapped to Numeric
     duration = Column(Integer, nullable=True) # Nullable
     duration_type = Column(String(20), nullable=True, comment='ENUM: Minutes, Hours, Days') # Nullable
+    is_continuous = Column(Boolean)
+    shift_duration_hours = Column(Integer)
     is_active = Column(Boolean, nullable=False, default=True)
     is_qualified = Column(Boolean, nullable=False, default=False)
 

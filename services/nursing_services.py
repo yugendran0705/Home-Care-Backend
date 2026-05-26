@@ -7,12 +7,12 @@ from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from repositories.services import ServiceRepository
+from repositories.nursing_services import NursingServiceRepository
 import models
-from schemas.services import ServiceCreate, ServiceUpdate
+from schemas.nursing_services import NursingServiceCreate, NursingServiceUpdate
 
 
-class ServiceService:
+class NursingServiceService:
     """
     Service layer for handling business logic related to services offered.
     """
@@ -25,9 +25,9 @@ class ServiceService:
             db (Session): The SQLAlchemy database session.
         """
         self.db = db
-        self.service_repo = ServiceRepository(db)
+        self.service_repo = NursingServiceRepository(db)
 
-    def create_service(self, *, service_in: ServiceCreate) -> models.Service:
+    def create_service(self, *, service_in: NursingServiceCreate) -> models.NursingService:
         """
         Creates a new service.
 
@@ -58,7 +58,7 @@ class ServiceService:
                 detail=f"An unexpected error occurred: {e}",
             )
 
-    def get_service_by_id(self, *, service_id: uuid.UUID) -> models.Service:
+    def get_service_by_id(self, *, service_id: uuid.UUID) -> models.NursingService:
         """
         Retrieves a service by its ID.
 
@@ -80,8 +80,8 @@ class ServiceService:
         return service
 
     def update_service(
-        self, *, service_id: uuid.UUID, updates: ServiceUpdate
-    ) -> models.Service:
+        self, *, service_id: uuid.UUID, updates: NursingServiceUpdate
+    ) -> models.NursingService:
         """
         Updates an existing service.
 
@@ -107,7 +107,7 @@ class ServiceService:
         updated_service = self.service_repo.update(service_id=service_id, updates=update_data)
         return updated_service
 
-    def list_all_services(self, *, skip: int = 0, limit: int = 100) -> List[models.Service]:
+    def list_all_services(self, *, skip: int = 0, limit: int = 100) -> List[models.NursingService]:
         """
         Retrieves a list of all available services.
 

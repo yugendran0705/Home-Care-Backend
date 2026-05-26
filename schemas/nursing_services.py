@@ -7,7 +7,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
-class ServiceBase(BaseModel):
+class NursingServiceBase(BaseModel):
     """
     Base schema for a service, containing the core fields.
     """
@@ -18,16 +18,18 @@ class ServiceBase(BaseModel):
     duration_type: str = Field(..., max_length=50, description="Type of duration (e.g., minutes, hours).", examples=["minutes"])
     is_active: Optional[bool] = Field(True, description="Indicates if the service is currently active.")
     is_qualified: Optional[bool] = Field(False, description="Indicates if the service has been soft-deleted.")
+    is_continuous: bool = Field(False,description = "Indicates if the service has to be performed continuously(Ex:daily)")
+    shift_duration_hours: int = Field(description="Time at which the service will be performed continuously")
 
 
-class ServiceCreate(ServiceBase):
+class NursingServiceCreate(NursingServiceBase):
     """
     Schema used for creating a new service.
     """
     pass
 
 
-class ServiceUpdate(BaseModel):
+class NursingServiceUpdate(BaseModel):
     """
     Schema for updating a service. All fields are optional to allow
     for partial updates.
@@ -39,12 +41,13 @@ class ServiceUpdate(BaseModel):
     duration_type: Optional[str] = Field(None, max_length=50, description="Type of duration (e.g., minutes, hours).")
     is_active: Optional[bool] = None
     is_qualified: Optional[bool] = None
+    shift_duration_hours: int = Field(description="Time at which the service will be performed continuously")
 
     class Config:
         from_attributes = True
 
 
-class ServiceResponse(ServiceBase):
+class NursingServiceResponse(NursingServiceBase):
     """
     Schema for returning service information from the API.
     Includes database-generated fields like `id` and `is_active`.

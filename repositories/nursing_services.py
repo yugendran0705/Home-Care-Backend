@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 import models
-from schemas.services import ServiceCreate # Assumes you will create this schema
+from schemas.nursing_services import NursingServiceCreate  # Assumes you will create this schema
 
 
-class ServiceRepository:
+class NursingServiceRepository:
     """
     Repository for handling all direct database operations for the Service model.
     """
@@ -24,7 +24,7 @@ class ServiceRepository:
         """
         self.db = db
 
-    def create(self, *, service_in: ServiceCreate) -> models.Service:
+    def create(self, *, service_in: NursingServiceCreate) -> models.NursingService:
         """
         Creates a new service that can be offered by nurses.
 
@@ -34,14 +34,14 @@ class ServiceRepository:
         Returns:
             models.Service: The newly created Service ORM object.
         """
-        db_service = models.Service(**service_in.model_dump())
-        
+        db_service = models.NursingService(**service_in.model_dump())
+
         self.db.add(db_service)
         self.db.commit()
         self.db.refresh(db_service)
         return db_service
 
-    def get_by_id(self, *, service_id: uuid.UUID) -> Optional[models.Service]:
+    def get_by_id(self, *, service_id: uuid.UUID) -> Optional[models.NursingService]:
         """
         Retrieves a service by its primary key.
 
@@ -51,9 +51,9 @@ class ServiceRepository:
         Returns:
             Optional[models.Service]: The Service object if found, otherwise None.
         """
-        return self.db.get(models.Service, service_id)
+        return self.db.get(models.NursingService, service_id)
 
-    def get_by_name(self, *, service_name: str) -> Optional[models.Service]:
+    def get_by_name(self, *, service_name: str) -> Optional[models.NursingService]:
         """
         Retrieves a service by its unique name.
 
@@ -63,10 +63,14 @@ class ServiceRepository:
         Returns:
             Optional[models.Service]: The Service object if found, otherwise None.
         """
-        statement = select(models.Service).where(models.Service.service_name == service_name)
+        statement = select(models.NursingService).where(
+            models.NursingService.service_name == service_name
+        )
         return self.db.execute(statement).scalar_one_or_none()
 
-    def update(self, *, service_id: uuid.UUID, updates: Dict[str, Any]) -> Optional[models.Service]:
+    def update(
+        self, *, service_id: uuid.UUID, updates: Dict[str, Any]
+    ) -> Optional[models.NursingService]:
         """
         Updates an existing service's details.
 
@@ -80,16 +84,16 @@ class ServiceRepository:
         db_service = self.get_by_id(service_id=service_id)
         if not db_service:
             return None
-            
+
         for key, value in updates.items():
             setattr(db_service, key, value)
-            
+
         self.db.add(db_service)
         self.db.commit()
         self.db.refresh(db_service)
         return db_service
 
-    def list_all(self, *, skip: int = 0, limit: int = 100) -> List[models.Service]:
+    def list_all(self, *, skip: int = 0, limit: int = 100) -> List[models.NursingService]:
         """
         Retrieves a paginated list of all services.
 
@@ -100,10 +104,10 @@ class ServiceRepository:
         Returns:
             List[models.Service]: A list of Service objects.
         """
-        statement = select(models.Service).offset(skip).limit(limit)
+        statement = select(models.NursingService).offset(skip).limit(limit)
         return self.db.execute(statement).scalars().all()
 
-    def delete(self, *, service_id: uuid.UUID) -> Optional[models.Service]:
+    def delete(self, *, service_id: uuid.UUID) -> Optional[models.NursingService]:
         """
         Deletes a service from the database.
         Note: A soft delete (setting `is_active` to False) is often preferred
@@ -118,7 +122,7 @@ class ServiceRepository:
         db_service = self.get_by_id(service_id=service_id)
         if not db_service:
             return None
-            
+
         self.db.delete(db_service)
         self.db.commit()
         return db_service

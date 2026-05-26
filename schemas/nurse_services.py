@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 # Import other schemas for nesting in responses
 from .nurses import NurseResponse
-from .services import ServiceResponse
+from .nursing_services import NursingServiceResponse
 
 
 class NurseServiceBase(BaseModel):
@@ -40,7 +40,7 @@ class NurseServiceResponse(NurseServiceBase):
     """
     # Nest the full response schemas for nurse and service
     nurse: NurseResponse
-    service: ServiceResponse
+    service: NursingServiceResponse
 
     class Config:
         from_attributes = True

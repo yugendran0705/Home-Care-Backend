@@ -1,7 +1,8 @@
 # /services/nurses.py
 
 import uuid
-from typing import Optional, Dict, Any
+import json
+from typing import Dict, Any
 from fastapi import UploadFile
 import shutil # Used for file operations
 
@@ -22,6 +23,11 @@ from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from schemas.nurse_services import NurseServicesResponse
 from schemas.services import ServiceResponse
 from config.security import create_access_token, create_refresh_token
+
+import logging
+logger = logging.getLogger(__name__)
+
+from utils.redis import get_cache, set_cache, delete_cache, NURSE_CACHE_TTL
 
 
 
@@ -145,6 +151,7 @@ class NurseService:
 
             access_token = create_access_token(data=token_data)
             refresh_token = create_refresh_token(data=token_data)
+            
             return NurseCreateResponse(
                 access_token=access_token,
                 refresh_token=refresh_token,
@@ -195,51 +202,96 @@ class NurseService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-    def get_nurse_profile(self, nurse_id: uuid.UUID) -> models.Nurse:
+    def get_nurse_profile(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
         Retrieves a nurse's profile by their ID along with their services.
         """
+
+        cache_key = f"user_{nurse_id}"
+
+        cached_data = get_cache(cache_key)
+        if cached_data:
+            try:
+                nurse_dict = json.loads(cached_data.decode('utf-8'))
+                nurse_response = NurseServicesResponse(**nurse_dict)
+                logger.debug(f"Cache hit for user {nurse_id}")
+                return nurse_response
+        
+            except Exception as e:
+                logger.warning(f"Failed to deserialize cached nurse for user {nurse_id}: {e}")
+                delete_cache(cache_key)  # Remove the corrupted cache entry
+
+        logger.debug(f"Fetching nurse for user {nurse_id} from database")
+
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
         if not nurse:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Nurse not found."
             )
-        return nurse
+        
+        nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
+        service_items = [ServiceResponse.model_validate(ns.service) for ns in nurse_services]
+        # Convert to Pydantic model
+        nurse_profile_response =  NurseServicesResponse(
+            nurse=NurseResponse.model_validate(nurse),
+            services=service_items,
+        )
+        # Cache the result
+        try:
+            cached_json = json.dumps(nurse_profile_response.model_dump(mode = "json")).encode('utf-8')
+            if set_cache(cache_key, cached_json, ex=NURSE_CACHE_TTL):
+                logger.debug(f"Cached nurse profile for user {nurse_id} as json with TTL {NURSE_CACHE_TTL} seconds")
+        except Exception as e:
+            logger.warning(f"Failed to cache nurse profile for user {nurse_id}: {e}")
+
+
+        return nurse_profile_response
         
 
     def update_nurse_profile(
         self, nurse_id: uuid.UUID, updates: Dict[str, Any]
-    ) -> models.Nurse:
+    ) -> NurseServicesResponse:
         """
         Updates a nurse's profile information.
         """
-        nurse = self.get_nurse_profile(nurse_id)
-        
-        if 'license_number' in updates and nurse.is_verified:
+        nurse_profile = self.get_nurse_profile(nurse_id)
+
+        updated_nurse = self.nurse_repo.update(nurse_id=nurse_profile.nurse.id, updates=updates)
+        if not updated_nurse:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot change the license number of a verified nurse."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nurse not found."
             )
 
-        updated_nurse = self.nurse_repo.update(nurse_id=nurse.id, updates=updates)
-        return updated_nurse
+        delete_cache(f"user_{nurse_id}")
+        return self.get_nurse_profile(nurse_id)
 
     def deactivate_nurse_account(self, nurse_id: uuid.UUID) -> bool:
         """
         Deactivates a nurse's account (soft delete).
         """
         self.get_nurse_profile(nurse_id)
+        delete_cache(f"user_{nurse_id}")
         return self.user_service.deactivate_user(user_id=nurse_id)
 
-    def verify_nurse_account(self, nurse_id: uuid.UUID) -> models.Nurse:
+    def verify_nurse_account(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
         Verifies a nurse's account.
         """
-        nurse = self.get_nurse_profile(nurse_id)
-        if nurse.is_verified:
+        nurse_profile = self.get_nurse_profile(nurse_id)
+        if nurse_profile.nurse.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Nurse account is already verified."
             )
-        return self.nurse_repo.update(nurse_id=nurse.id, updates={"is_verified": True})
+
+        updated_nurse = self.nurse_repo.update(nurse_id=nurse_id, updates={"is_verified": True})
+        if not updated_nurse:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nurse not found."
+            )
+
+        delete_cache(f"user_{nurse_id}")
+        return self.get_nurse_profile(nurse_id)

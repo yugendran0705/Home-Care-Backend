@@ -88,7 +88,8 @@ class NurseCreateResponse(BaseModel):
     refresh_token: str
     nurse: NurseResponse
     services: List[ServiceResponse]
-                   # Add this field to include services
+
+                  
 
     class Config:
         from_attributes = True

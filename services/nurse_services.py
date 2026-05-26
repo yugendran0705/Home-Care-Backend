@@ -1,5 +1,4 @@
 # /services/nurse_services.py
-
 import uuid
 from typing import List
 
@@ -16,6 +15,7 @@ from schemas.nurse_services import (
     NurseServicesResponse,
 )
 from schemas.services import ServiceResponse
+from utils.redis import delete_cache
 
 
 class NurseAssociateService:
@@ -130,7 +130,8 @@ class NurseAssociateService:
 
         Raises:
             HTTPException: If nurse not found.
-        """
+        """        
+
         # Validate that nurse exists
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
         if not nurse:
@@ -145,6 +146,7 @@ class NurseAssociateService:
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )
+        
 
     def update_services_for_nurse(self, nurse_id: uuid.UUID, service_ids: List[uuid.UUID]) -> NurseServicesResponse:
         """
@@ -188,7 +190,6 @@ class NurseAssociateService:
                 detail=f"Service(s) with ID(s) {missing_services} not found."
             )
 
-        # Validate that every service is active
         inactive_services = []
         for service_id in unique_service_ids:
             service = self.service_repo.get_by_id(service_id=service_id)
@@ -208,10 +209,12 @@ class NurseAssociateService:
         )
         service_items = [ServiceResponse.model_validate(ns.service) for ns in result]
 
+        delete_cache(f"user_{nurse_id}")
+
         return NurseServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
-        )
+        )        
     
     def remove_service_from_nurse(self, nurse_id: uuid.UUID) -> bool:
         """
@@ -235,5 +238,6 @@ class NurseAssociateService:
             )
 
         self.nurse_service_repo.delete_all_by_nurse(nurse_id=nurse_id)
+        delete_cache(f"user_{nurse_id}")
         return True
         

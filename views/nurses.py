@@ -110,13 +110,13 @@ def upload_nurse_document(
             status_code=status.HTTP_200_OK)
 def get_my_profile(
     current_user: models.User = nurse_dependency,
-    service: NurseAssociateService = Depends(get_nurse_service_associate)
+    service: NurseService = Depends(get_nurse_service)
 ):
     """
     Retrieves the profile for the currently authenticated nurse.
     """
     try:
-        nurse_profile = service.get_services_for_nurse(nurse_id=current_user.id)
+        nurse_profile = service.get_nurse_profile(nurse_id=current_user.id)
         if not nurse_profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nurse profile not found.")
         return nurse_profile
@@ -131,7 +131,7 @@ def get_my_profile(
 
 
 @router.put("/me", 
-            response_model=NurseResponse, 
+            response_model=NurseServicesResponse, 
             summary="Update current nurse's profile",
             status_code=status.HTTP_200_OK)
 def update_my_profile(
@@ -203,7 +203,7 @@ def deactivate_my_account(
 
 @router.get(
     "/one/{nurse_id}",
-    response_model=NurseResponse,
+    response_model=NurseServicesResponse,
     summary="Get nurse profile by ID (Admin Access)",
     dependencies=[admin_dependency],
     status_code=status.HTTP_200_OK
@@ -231,7 +231,7 @@ def get_nurse_by_id_as_admin(
 
 @router.patch(
     "/{nurse_id}/verify",
-    response_model=NurseResponse,
+    response_model=NurseServicesResponse,
     status_code=status.HTTP_200_OK,
     summary="Verify a nurse's account",
     dependencies=[admin_dependency]

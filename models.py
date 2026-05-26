@@ -108,7 +108,7 @@ class NurseService(Base):
     __tablename__ = "nurse_services"
     # Composite primary key for the junction table
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), primary_key=True)
-    service_id = Column(UUID(as_uuid=True), ForeignKey("services.service_id"), primary_key=True)
+    service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), primary_key=True)
     price = Column(Numeric(10, 2), nullable=True) # Nullable, as per DBML
 
     # Relationships
@@ -131,7 +131,7 @@ class Booking(Base):
     id = Column("booking_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.patient_id"), nullable=False)
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), nullable=False)
-    service_id = Column(UUID(as_uuid=True), ForeignKey("services.service_id"), nullable=False)
+    service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), nullable=False)
     booking_time = Column(DateTime(timezone=True), nullable=False, default=func.now())
     scheduled_start_time = Column(DateTime(timezone=True), nullable=False)
     scheduled_end_time = Column(DateTime(timezone=True), nullable=False)

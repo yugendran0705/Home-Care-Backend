@@ -131,8 +131,19 @@ class NursingServiceService:
         Returns:
             Dict[str, str]: A confirmation message.
         """
-        # Ensure the service exists before trying to delete
-        self.get_service_by_id(service_id=service_id)
+        service = self.get_service_by_id(service_id=service_id)
+
+        if service.bookings:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete service with existing bookings.",
+            )
+
+        if service.nurse_services:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete service that is assigned to nurses.",
+            )
 
         deleted_service = self.service_repo.delete(service_id=service_id)
         if not deleted_service:
@@ -141,6 +152,6 @@ class NursingServiceService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service not found.",
             )
-            
+
         return {"message": f"Service with ID {service_id} has been deleted."}
 

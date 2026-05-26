@@ -1,5 +1,5 @@
 
-# /views/services.py
+# /views/nursing_services.py
 
 import uuid
 from typing import List, Dict
@@ -16,8 +16,8 @@ import models
 
 # Create API router
 router = APIRouter(
-    prefix="/services",
-    tags=["Services"]
+    prefix="/nursing_services",
+    tags=["NursingServices"]
 )
 
 # Dependency to provide the ServiceService

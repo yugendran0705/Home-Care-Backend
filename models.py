@@ -109,11 +109,10 @@ class NurseService(Base):
     # Composite primary key for the junction table
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), primary_key=True)
     service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), primary_key=True)
-    price = Column(Numeric(10, 2), nullable=True) # Nullable, as per DBML
 
     # Relationships
     nurse = relationship("Nurse", back_populates="nurse_services")
-    service = relationship("Service", back_populates="nurse_services")
+    service = relationship("NursingService", back_populates="nurse_services")
 
 class Availability(Base):
     __tablename__ = "availability"
@@ -144,7 +143,7 @@ class Booking(Base):
     # Relationships
     patient = relationship("Patient", back_populates="bookings")
     nurse = relationship("Nurse", back_populates="bookings")
-    service = relationship("Service", back_populates="bookings")
+    service = relationship("NursingService", back_populates="bookings")
     booking_address = relationship("Address", primaryjoin="Booking.booking_address_id == Address.id")
     review = relationship("Review", back_populates="booking", uselist=False) # One review per booking
     payment = relationship("Payment", back_populates="booking", uselist=False) # One payment per booking

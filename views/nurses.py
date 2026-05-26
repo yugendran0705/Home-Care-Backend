@@ -10,7 +10,10 @@ from utils.roleChecker import RoleChecker
 from services.nurses import NurseService
 import models
 from schemas.nurses import *
+from schemas.nurse_services import NurseServicesResponse
 from schemas.nurse_documents import *
+from repositories.nursing_services import NursingServiceRepository
+from services.nurse_services import NurseAssociateService
 
 # Create API router
 router = APIRouter(
@@ -21,6 +24,10 @@ router = APIRouter(
 # Dependency to provide the NurseService
 def get_nurse_service(db=Depends(get_db)) -> NurseService:
     return NurseService(db)
+
+def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociateService:
+    return NurseAssociateService(db)
+
 
 # Define role-based access dependencies
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
@@ -43,7 +50,9 @@ async def register_new_nurse(
     """
     try:
         created_nurse = service.create_nurse_and_user_account(nurse_in=nurse_in)
+        
         return created_nurse
+    
     except HTTPException as e:
         print(f"An unexpected error occurred during nurse registration: {e}")
         raise e
@@ -96,7 +105,7 @@ def upload_nurse_document(
 
 
 @router.get("/me", 
-            response_model=NurseResponse, 
+            response_model=NurseServicesResponse, 
             summary="Get current nurse's profile",
             status_code=status.HTTP_200_OK)
 def get_my_profile(
@@ -122,7 +131,7 @@ def get_my_profile(
 
 
 @router.put("/me", 
-            response_model=NurseResponse, 
+            response_model=NurseServicesResponse, 
             summary="Update current nurse's profile",
             status_code=status.HTTP_200_OK)
 def update_my_profile(
@@ -194,7 +203,7 @@ def deactivate_my_account(
 
 @router.get(
     "/one/{nurse_id}",
-    response_model=NurseResponse,
+    response_model=NurseServicesResponse,
     summary="Get nurse profile by ID (Admin Access)",
     dependencies=[admin_dependency],
     status_code=status.HTTP_200_OK
@@ -222,7 +231,7 @@ def get_nurse_by_id_as_admin(
 
 @router.patch(
     "/{nurse_id}/verify",
-    response_model=NurseResponse,
+    response_model=NurseServicesResponse,
     status_code=status.HTTP_200_OK,
     summary="Verify a nurse's account",
     dependencies=[admin_dependency]
@@ -247,4 +256,3 @@ def verify_nurse_account(
             detail="An unexpected error occurred while verifying nurse account."
         )
 
-    

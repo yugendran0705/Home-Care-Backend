@@ -1,7 +1,8 @@
 # /services/nurses.py
 
 import uuid
-from typing import Optional, Dict, Any
+import json
+from typing import Dict, Any
 from fastapi import UploadFile
 import shutil # Used for file operations
 
@@ -10,15 +11,24 @@ from sqlalchemy.orm import Session
 
 # Import necessary components
 from repositories.nurses import NurseRepository
-from repositories.address import AddressRepository
+from repositories.nurse_services import NurseServiceRepository
 from repositories.nurse_documents import NurseDocumentRepository # Import the new repository
+from repositories.nursing_services import NursingServiceRepository  # <- for validating service IDs during registration
 from services.users import UserService
 from services.address import AddressService
 import models
-from schemas.nurses import NurseCreate
+from schemas.nurses import NurseCreate, NurseCreateResponse, NurseResponse
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
+from schemas.nurse_services import NurseServicesResponse
+from schemas.nursing_services import NursingServiceResponse
 from config.security import create_access_token, create_refresh_token
+
+import logging
+logger = logging.getLogger(__name__)
+
+from utils.redis import get_cache, set_cache, delete_cache, NURSE_CACHE_TTL
+
 
 
 class NurseService:
@@ -35,22 +45,69 @@ class NurseService:
         self.user_service = UserService(db)
         self.address_service = AddressService(db)
         self.doc_repo = NurseDocumentRepository(db) # Initialize the document repository
+        self.nurse_service_repo = NurseServiceRepository(db)
+        self.service_repo = NursingServiceRepository(db)  # used for service existence checks
 
     def create_nurse_and_user_account(
         self,
         nurse_in: NurseCreate
-    ) -> models.Nurse:
+    ) -> NurseCreateResponse:
         """
         Handles the initial registration of a new nurse.
         Creates the user and profile with a default unverified status.
+        Also links any services provided during registration.
         """
-        nurse_data_dict = nurse_in.model_dump(exclude={"password", "email", "address"})
+        nurse_data_dict = nurse_in.model_dump(exclude={"password", "email", "address", "services"})
         address_data = nurse_in.address
+        services_data = nurse_in.services
+
+        # Step 0: Validate any provided services IDs before doing any writes.
+        service_ids = []
+        if services_data:
+            for service in services_data:
+                if not service.service_ids:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Each service registration item must include at least one service_id."
+                    )
+
+                for service_id_raw in service.service_ids:
+                    try:
+                        service_id = uuid.UUID(str(service_id_raw))
+                    except Exception:
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"Invalid service_id format: {service_id_raw}"
+                        )
+
+                    if service_id in service_ids:
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"Duplicate service_id detected: {service_id}"
+                        )
+
+                    service = self.service_repo.get_by_id(service_id=service_id)
+                    if not service:
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Service with ID {service_id} not found."
+                        )
+
+                    if not service.is_active:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Service with ID {service_id} is not active and cannot be assigned."
+                        )
+
+                    service_ids.append(service_id)
 
         try:
             # Step 1: Check for existing license number or email
             if self.nurse_repo.get_by_license_number(license_number=nurse_in.license_number):
-                raise ValueError(f"License number '{nurse_in.license_number}' is already registered.")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"License number '{nurse_in.license_number}' is already registered."
+                )
             
             # Step 2: Create the User account
             new_user = self.user_service.create_new_user(
@@ -79,22 +136,30 @@ class NurseService:
                     updates={"address_id": new_address.id}
                 )
             
+            # Step 5 (Optional): Bulk create and link services
+            if service_ids:
+                self.nurse_service_repo.bulk_create_for_nurse(
+                    nurse_id=new_nurse.id,
+                    service_ids=service_ids
+                )
+            
             self.db.refresh(new_nurse)
+            
             token_data = {
                 "id": str(new_user.id)
             }
-            
+
             access_token = create_access_token(data=token_data)
             refresh_token = create_refresh_token(data=token_data)
-            return {
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-                "nurse": new_nurse
-            }
+            
+            return NurseCreateResponse(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                nurse=NurseResponse.model_validate(new_nurse),
+                services=[NursingServiceResponse.model_validate(self.service_repo.get_by_id(service_id=sid)) for sid in service_ids] if service_ids else []
+            )
 
-        except ValueError as e:
-            self.db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        
         except Exception as e:
             self.db.rollback()
             raise HTTPException(
@@ -137,51 +202,96 @@ class NurseService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-    def get_nurse_profile(self, nurse_id: uuid.UUID) -> models.Nurse:
+    def get_nurse_profile(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
-        Retrieves a nurse's profile by their ID.
+        Retrieves a nurse's profile by their ID along with their services.
         """
+
+        cache_key = f"user_{nurse_id}"
+
+        cached_data = get_cache(cache_key)
+        if cached_data:
+            try:
+                nurse_dict = json.loads(cached_data.decode('utf-8'))
+                nurse_response = NurseServicesResponse(**nurse_dict)
+                logger.debug(f"Cache hit for user {nurse_id}")
+                return nurse_response
+        
+            except Exception as e:
+                logger.warning(f"Failed to deserialize cached nurse for user {nurse_id}: {e}")
+                delete_cache(cache_key)  # Remove the corrupted cache entry
+
+        logger.debug(f"Fetching nurse for user {nurse_id} from database")
+
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
         if not nurse:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Nurse not found."
             )
-        return nurse
+        
+        nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
+        service_items = [NursingServiceResponse.model_validate(ns.service) for ns in nurse_services]
+        # Convert to Pydantic model
+        nurse_profile_response =  NurseServicesResponse(
+            nurse=NurseResponse.model_validate(nurse),
+            services=service_items,
+        )
+        # Cache the result
+        try:
+            cached_json = json.dumps(nurse_profile_response.model_dump(mode = "json")).encode('utf-8')
+            if set_cache(cache_key, cached_json, ex=NURSE_CACHE_TTL):
+                logger.debug(f"Cached nurse profile for user {nurse_id} as json with TTL {NURSE_CACHE_TTL} seconds")
+        except Exception as e:
+            logger.warning(f"Failed to cache nurse profile for user {nurse_id}: {e}")
+
+
+        return nurse_profile_response
+        
 
     def update_nurse_profile(
         self, nurse_id: uuid.UUID, updates: Dict[str, Any]
-    ) -> models.Nurse:
+    ) -> NurseServicesResponse:
         """
         Updates a nurse's profile information.
         """
-        nurse = self.get_nurse_profile(nurse_id)
-        
-        if 'license_number' in updates and nurse.is_verified:
+        nurse_profile = self.get_nurse_profile(nurse_id)
+
+        updated_nurse = self.nurse_repo.update(nurse_id=nurse_profile.nurse.id, updates=updates)
+        if not updated_nurse:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot change the license number of a verified nurse."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nurse not found."
             )
 
-        updated_nurse = self.nurse_repo.update(nurse_id=nurse.id, updates=updates)
-        return updated_nurse
+        delete_cache(f"user_{nurse_id}")
+        return self.get_nurse_profile(nurse_id)
 
     def deactivate_nurse_account(self, nurse_id: uuid.UUID) -> bool:
         """
         Deactivates a nurse's account (soft delete).
         """
         self.get_nurse_profile(nurse_id)
+        delete_cache(f"user_{nurse_id}")
         return self.user_service.deactivate_user(user_id=nurse_id)
 
-    def verify_nurse_account(self, nurse_id: uuid.UUID) -> models.Nurse:
+    def verify_nurse_account(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
         """
         Verifies a nurse's account.
         """
-        nurse = self.get_nurse_profile(nurse_id)
-        if nurse.is_verified:
+        nurse_profile = self.get_nurse_profile(nurse_id)
+        if nurse_profile.nurse.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Nurse account is already verified."
             )
-        return self.nurse_repo.update(nurse_id=nurse.id, updates={"is_verified": True})
-    
+
+        updated_nurse = self.nurse_repo.update(nurse_id=nurse_id, updates={"is_verified": True})
+        if not updated_nurse:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nurse not found."
+            )
+
+        delete_cache(f"user_{nurse_id}")
+        return self.get_nurse_profile(nurse_id)

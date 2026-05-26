@@ -4,8 +4,8 @@ import uuid
 from datetime import date
 from typing import Optional, List
 from decimal import Decimal
-
 from pydantic import BaseModel, EmailStr, Field
+from .nursing_services import NursingServiceBase, NursingServiceResponse
 
 # Import other schemas for nesting
 from .users import UserResponse
@@ -26,15 +26,32 @@ class NurseBase(BaseModel):
     bio: Optional[str] = Field(None, examples=["Experienced pediatric nurse."])
     profile_picture_url: str = Field(..., examples=["https://example.com/profile.jpg"])
 
+class NurseServiceRegistrationItem(BaseModel):
+    """Represents a group of service IDs to register for a nurse."""
+    service_ids: List[uuid.UUID] = Field(
+        ..., 
+        min_length=1,
+        description="The list of service IDs to register for this nurse."
+    )
+
+
+
+
 
 class NurseCreate(NurseBase):
     """
-    Schema for registering a new nurse. Includes user account credentials
-    and an optional address.
+    Schema for registering a new nurse. Includes user account credentials,
+    an optional address, and optional services.
     """
     email: EmailStr = Field(..., examples=["priya.sharma@example.com"])
     password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
     address: Optional[AddressCreate] = None
+    services: Optional[List[NurseServiceRegistrationItem]] = Field(
+        None,
+        description="Optional list of service IDs to register for the nurse",
+        examples=[[{"service_ids": ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"]}]]
+    )
+    
 
 
 class NurseUpdate(BaseModel):
@@ -70,5 +87,9 @@ class NurseCreateResponse(BaseModel):
     access_token: str
     refresh_token: str
     nurse: NurseResponse
+    services: List[NursingServiceResponse]
+
+                  
+
     class Config:
         from_attributes = True

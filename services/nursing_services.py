@@ -1,5 +1,5 @@
 
-# /services/services.py
+# /services/nursing_services.py
 # adding in comments for personal notes
 import uuid
 import json #converting str to dicts and vice versa
@@ -9,15 +9,15 @@ from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from repositories.services import ServiceRepository
+from repositories.nursing_services import NursingServiceRepository
 import models
-from schemas.services import ServiceCreate, ServiceUpdate, ServiceResponse  
+from schemas.nursing_services import NursingServiceCreate, NursingServiceUpdate, NursingServiceResponse  
 
 from utils.redis import get_cache, set_cache, delete_cache, SERVICE_CACHE_TTL
 logger = logging.getLogger(__name__) #logging
 CACHE_KEY_PREFIX = "service_profile_" #service prefix string defn
 
-class ServiceService:
+class NursingServiceService:
     """
     Service layer for handling business logic related to services offered.
     """
@@ -30,17 +30,17 @@ class ServiceService:
             db (Session): The SQLAlchemy database session.
         """
         self.db = db
-        self.service_repo = ServiceRepository(db)
+        self.service_repo = NursingServiceRepository(db)
 
-    def create_service(self, *, service_in: ServiceCreate) -> models.Service:
+    def create_service(self, *, service_in: NursingServiceCreate) -> models.NursingService:
         """
         Creates a new service.
 
         Args:
-            service_in (ServiceCreate): The data for the new service.
+            service_in (NursingServiceCreate): The data for the new service.
 
         Returns:
-            models.Service: The newly created service object.
+            models.NursingService: The newly created service object.
 
         Raises:
             HTTPException: If a service with the same name already exists.
@@ -63,7 +63,7 @@ class ServiceService:
                 detail=f"An unexpected error occurred: {e}",
             )
 
-    def get_service_by_id(self, *, service_id: uuid.UUID) -> ServiceResponse:
+    def get_service_by_id(self, *, service_id: uuid.UUID) -> NursingServiceResponse:
         """
         Retrieves a service by its ID, checks redis cache first
 
@@ -75,9 +75,9 @@ class ServiceService:
         if cached_data:
             try:
                 service_dict = json.loads(cached_data.decode('utf-8'))
-                service_response = ServiceResponse(**service_dict)
+                nurse_service_response = NursingServiceResponse(**service_dict)
                 logger.debug(f"Cache hit for service {service_id}")
-                return service_response
+                return nurse_service_response
             except Exception as e:
                 logger.warning(f"Failed to deserialize cached service for ID {service_id}: {e}")
 
@@ -91,21 +91,21 @@ class ServiceService:
             )
 
         # 3. sqlalchemy db obj to pydantic model
-        service_response = ServiceResponse.model_validate(service, from_attributes=True)
+        nurse_service_response = NursingServiceResponse.model_validate(service, from_attributes=True)
         
         # 4. save data into redis, fast retrieval 
         try:
-            cached_json = json.dumps(service_response.model_dump(mode='json')).encode('utf-8')
+            cached_json = json.dumps(nurse_service_response.model_dump(mode='json')).encode('utf-8')
             if set_cache(cache_key, cached_json, ex=SERVICE_CACHE_TTL):
                 logger.debug(f"Cached service {service_id} as JSON with {SERVICE_CACHE_TTL}s TTL")
         except Exception as e:
             logger.warning(f"Failed to cache service {service_id}: {e}")
             
-        return service_response
+        return nurse_service_response
 
     def update_service(
-            self, *, service_id: uuid.UUID, updates: ServiceUpdate
-        ) -> models.Service:
+            self, *, service_id: uuid.UUID, updates: NursingServiceUpdate
+        ) -> models.NursingService:
             """
             Updates an existing service and invalidates its cache.
             """
@@ -118,10 +118,7 @@ class ServiceService:
                 )
             update_data = updates.model_dump(exclude_unset=True)
             if not update_data:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No update data provided.",
-                )
+                return service
 
             # data update in sql
             updated_service = self.service_repo.update(service_id=service_id, updates=update_data)
@@ -131,7 +128,7 @@ class ServiceService:
 
             return updated_service
 
-    def list_all_services(self, *, skip: int = 0, limit: int = 100) -> List[models.Service]:
+    def list_all_services(self, *, skip: int = 0, limit: int = 100) -> List[models.NursingService]:
         """
         Retrieves a list of all available services.
 
@@ -140,7 +137,7 @@ class ServiceService:
             limit (int): Maximum number of records to return.
 
         Returns:
-            List[models.Service]: A list of service objects.
+            List[models.NursingService]: A list of service objects.
         """
         return self.service_repo.list_all(skip=skip, limit=limit)
 
@@ -154,6 +151,18 @@ class ServiceService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service not found.",
+            )
+        
+        if service.bookings:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete service with existing bookings.",
+            )
+
+        if service.nurse_services:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete service that is assigned to nurses.",
             )
 
         deleted_service = self.service_repo.delete(service_id=service_id)

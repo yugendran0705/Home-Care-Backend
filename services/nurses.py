@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from repositories.nurses import NurseRepository
 from repositories.nurse_services import NurseServiceRepository
 from repositories.nurse_documents import NurseDocumentRepository # Import the new repository
-from repositories.services import ServiceRepository  # <- for validating service IDs during registration
+from repositories.nursing_services import NursingServiceRepository  # <- for validating service IDs during registration
 from services.users import UserService
 from services.address import AddressService
 import models
@@ -21,7 +21,7 @@ from schemas.nurses import NurseCreate, NurseCreateResponse, NurseResponse
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
 from schemas.nurse_services import NurseServicesResponse
-from schemas.services import ServiceResponse
+from schemas.nursing_services import NursingServiceResponse
 from config.security import create_access_token, create_refresh_token
 
 import logging
@@ -46,7 +46,7 @@ class NurseService:
         self.address_service = AddressService(db)
         self.doc_repo = NurseDocumentRepository(db) # Initialize the document repository
         self.nurse_service_repo = NurseServiceRepository(db)
-        self.service_repo = ServiceRepository(db)  # used for service existence checks
+        self.service_repo = NursingServiceRepository(db)  # used for service existence checks
 
     def create_nurse_and_user_account(
         self,
@@ -156,7 +156,7 @@ class NurseService:
                 access_token=access_token,
                 refresh_token=refresh_token,
                 nurse=NurseResponse.model_validate(new_nurse),
-                services=[ServiceResponse.model_validate(self.service_repo.get_by_id(service_id=sid)) for sid in service_ids] if service_ids else []
+                services=[NursingServiceResponse.model_validate(self.service_repo.get_by_id(service_id=sid)) for sid in service_ids] if service_ids else []
             )
 
         
@@ -231,7 +231,7 @@ class NurseService:
             )
         
         nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
-        service_items = [ServiceResponse.model_validate(ns.service) for ns in nurse_services]
+        service_items = [NursingServiceResponse.model_validate(ns.service) for ns in nurse_services]
         # Convert to Pydantic model
         nurse_profile_response =  NurseServicesResponse(
             nurse=NurseResponse.model_validate(nurse),

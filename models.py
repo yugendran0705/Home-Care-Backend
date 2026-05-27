@@ -87,14 +87,16 @@ class Address(Base):
     # No direct relationship to Patient/Nurse here as they have foreign keys to Address.id
     # Bookings relationship is handled from Booking side
 
-class Service(Base):
-    __tablename__ = "services"
+class NursingService(Base):
+    __tablename__ = "nursing_services"
     id = Column("service_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     service_name = Column(String(100), unique=True, nullable=False)
     description = Column(Text, nullable=True) # Nullable
     base_price = Column(Numeric(10, 2), nullable=False, default=0.00) # DECIMAL(10,2) mapped to Numeric
     duration = Column(Integer, nullable=True) # Nullable
     duration_type = Column(String(20), nullable=True, comment='ENUM: Minutes, Hours, Days') # Nullable
+    is_continuous = Column(Boolean)
+    shift_duration_hours = Column(Integer)
     is_active = Column(Boolean, nullable=False, default=True)
     is_qualified = Column(Boolean, nullable=False, default=False)
 
@@ -106,11 +108,11 @@ class NurseService(Base):
     __tablename__ = "nurse_services"
     # Composite primary key for the junction table
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), primary_key=True)
-    service_id = Column(UUID(as_uuid=True), ForeignKey("services.service_id"), primary_key=True)
+    service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), primary_key=True)
 
     # Relationships
     nurse = relationship("Nurse", back_populates="nurse_services")
-    service = relationship("Service", back_populates="nurse_services")
+    service = relationship("NursingService", back_populates="nurse_services")
 
 class Availability(Base):
     __tablename__ = "availability"
@@ -128,7 +130,7 @@ class Booking(Base):
     id = Column("booking_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.patient_id"), nullable=False)
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), nullable=False)
-    service_id = Column(UUID(as_uuid=True), ForeignKey("services.service_id"), nullable=False)
+    service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), nullable=False)
     booking_time = Column(DateTime(timezone=True), nullable=False, default=func.now())
     scheduled_start_time = Column(DateTime(timezone=True), nullable=False)
     scheduled_end_time = Column(DateTime(timezone=True), nullable=False)
@@ -141,7 +143,7 @@ class Booking(Base):
     # Relationships
     patient = relationship("Patient", back_populates="bookings")
     nurse = relationship("Nurse", back_populates="bookings")
-    service = relationship("Service", back_populates="bookings")
+    service = relationship("NursingService", back_populates="bookings")
     booking_address = relationship("Address", primaryjoin="Booking.booking_address_id == Address.id")
     review = relationship("Review", back_populates="booking", uselist=False) # One review per booking
     payment = relationship("Payment", back_populates="booking", uselist=False) # One payment per booking

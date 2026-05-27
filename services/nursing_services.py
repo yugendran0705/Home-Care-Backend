@@ -1,5 +1,5 @@
 
-# /services/services.py
+# /services/nursing_services.py
 
 import uuid
 from typing import List, Optional, Dict, Any
@@ -7,12 +7,12 @@ from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from repositories.services import ServiceRepository
+from repositories.nursing_services import NursingServiceRepository
 import models
-from schemas.services import ServiceCreate, ServiceUpdate
+from schemas.nursing_services import NursingServiceCreate, NursingServiceUpdate
 
 
-class ServiceService:
+class NursingServiceService:
     """
     Service layer for handling business logic related to services offered.
     """
@@ -25,17 +25,17 @@ class ServiceService:
             db (Session): The SQLAlchemy database session.
         """
         self.db = db
-        self.service_repo = ServiceRepository(db)
+        self.service_repo = NursingServiceRepository(db)
 
-    def create_service(self, *, service_in: ServiceCreate) -> models.Service:
+    def create_service(self, *, service_in: NursingServiceCreate) -> models.NursingService:
         """
         Creates a new service.
 
         Args:
-            service_in (ServiceCreate): The data for the new service.
+            service_in (NursingServiceCreate): The data for the new service.
 
         Returns:
-            models.Service: The newly created service object.
+            models.NursingService: The newly created service object.
 
         Raises:
             HTTPException: If a service with the same name already exists.
@@ -58,7 +58,7 @@ class ServiceService:
                 detail=f"An unexpected error occurred: {e}",
             )
 
-    def get_service_by_id(self, *, service_id: uuid.UUID) -> models.Service:
+    def get_service_by_id(self, *, service_id: uuid.UUID) -> models.NursingService:
         """
         Retrieves a service by its ID.
 
@@ -66,7 +66,7 @@ class ServiceService:
             service_id (uuid.UUID): The ID of the service to retrieve.
 
         Returns:
-            models.Service: The service object.
+            models.NursingService: The service object.
 
         Raises:
             HTTPException: If the service is not found.
@@ -80,17 +80,17 @@ class ServiceService:
         return service
 
     def update_service(
-        self, *, service_id: uuid.UUID, updates: ServiceUpdate
-    ) -> models.Service:
+        self, *, service_id: uuid.UUID, updates: NursingServiceUpdate
+    ) -> models.NursingService:
         """
         Updates an existing service.
 
         Args:
             service_id (uuid.UUID): The ID of the service to update.
-            updates (ServiceUpdate): The data to update.
+            updates (NursingServiceUpdate): The data to update.
 
         Returns:
-            models.Service: The updated service object.
+            models.NursingService: The updated service object.
         """
         # First, ensure the service exists
         self.get_service_by_id(service_id=service_id)
@@ -107,7 +107,7 @@ class ServiceService:
         updated_service = self.service_repo.update(service_id=service_id, updates=update_data)
         return updated_service
 
-    def list_all_services(self, *, skip: int = 0, limit: int = 100) -> List[models.Service]:
+    def list_all_services(self, *, skip: int = 0, limit: int = 100) -> List[models.NursingService]:
         """
         Retrieves a list of all available services.
 
@@ -116,7 +116,7 @@ class ServiceService:
             limit (int): Maximum number of records to return.
 
         Returns:
-            List[models.Service]: A list of service objects.
+            List[models.NursingService]: A list of service objects.
         """
         return self.service_repo.list_all(skip=skip, limit=limit)
 
@@ -131,8 +131,19 @@ class ServiceService:
         Returns:
             Dict[str, str]: A confirmation message.
         """
-        # Ensure the service exists before trying to delete
-        self.get_service_by_id(service_id=service_id)
+        service = self.get_service_by_id(service_id=service_id)
+
+        if service.bookings:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete service with existing bookings.",
+            )
+
+        if service.nurse_services:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete service that is assigned to nurses.",
+            )
 
         deleted_service = self.service_repo.delete(service_id=service_id)
         if not deleted_service:
@@ -141,6 +152,6 @@ class ServiceService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Service not found.",
             )
-            
+
         return {"message": f"Service with ID {service_id} has been deleted."}
 

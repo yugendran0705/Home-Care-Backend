@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional, List
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field
-from .services import ServiceBase, ServiceResponse
+from .nursing_services import NursingServiceBase, NursingServiceResponse
 
 # Import other schemas for nesting
 from .users import UserResponse
@@ -87,7 +87,7 @@ class NurseCreateResponse(BaseModel):
     access_token: str
     refresh_token: str
     nurse: NurseResponse
-    services: List[ServiceResponse]
+    services: List[NursingServiceResponse]
 
                   
 

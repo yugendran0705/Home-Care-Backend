@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, validator
 # Import other schemas for nesting in the response
 from .patients import PatientResponse
 from .nurses import NurseResponse
-from .services import ServiceResponse
+from .nursing_services import NursingServiceResponse
 from .address import AddressResponse
 # The following are placeholders; you would create these schemas as well
 from .reviews import ReviewResponse
@@ -66,7 +66,7 @@ class BookingResponse(BookingBase):
     # Nested response objects for rich context
     patient: PatientResponse
     nurse: NurseResponse
-    service: ServiceResponse
+    service: NursingServiceResponse
     booking_address: AddressResponse
     review: Optional[ReviewResponse] = None
     payment: Optional[PaymentResponse] = None

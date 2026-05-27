@@ -1,5 +1,4 @@
 # /services/nurse_services.py
-
 import uuid
 from typing import List
 
@@ -9,13 +8,14 @@ from sqlalchemy.orm import Session
 # Import necessary components
 from repositories.nurse_services import NurseServiceRepository
 from repositories.nurses import NurseRepository
-from repositories.services import ServiceRepository
+from repositories.nursing_services import NursingServiceRepository
 from schemas.nurses import NurseResponse
 from schemas.nurse_services import (
     NurseServiceBulkCreate,
     NurseServicesResponse,
 )
-from schemas.services import ServiceResponse
+from schemas.nursing_services import NursingServiceResponse
+from utils.redis import delete_cache
 
 
 class NurseAssociateService:
@@ -30,7 +30,7 @@ class NurseAssociateService:
         self.db = db
         self.nurse_service_repo = NurseServiceRepository(db)
         self.nurse_repo = NurseRepository(db)
-        self.service_repo = ServiceRepository(db)
+        self.service_repo = NursingServiceRepository(db)
 
     def assign_service_to_nurse(self, nurse_id, nurse_service_in: NurseServiceBulkCreate) -> NurseServicesResponse:
         """
@@ -115,7 +115,7 @@ class NurseAssociateService:
 
         return NurseServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
-            services=[ServiceResponse.model_validate(ns.service) for ns in result]
+            services=[NursingServiceResponse.model_validate(ns.service) for ns in result]
         )
 
     def get_services_for_nurse(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
@@ -130,7 +130,8 @@ class NurseAssociateService:
 
         Raises:
             HTTPException: If nurse not found.
-        """
+        """        
+
         # Validate that nurse exists
         nurse = self.nurse_repo.get_by_id(nurse_id=nurse_id)
         if not nurse:
@@ -140,11 +141,12 @@ class NurseAssociateService:
             )
 
         nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
-        service_items = [ServiceResponse.model_validate(ns.service) for ns in nurse_services]
+        service_items = [NursingServiceResponse.model_validate(ns.service) for ns in nurse_services]
         return NurseServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )
+        
 
     def update_services_for_nurse(self, nurse_id: uuid.UUID, service_ids: List[uuid.UUID]) -> NurseServicesResponse:
         """
@@ -188,7 +190,6 @@ class NurseAssociateService:
                 detail=f"Service(s) with ID(s) {missing_services} not found."
             )
 
-        # Validate that every service is active
         inactive_services = []
         for service_id in unique_service_ids:
             service = self.service_repo.get_by_id(service_id=service_id)
@@ -206,12 +207,14 @@ class NurseAssociateService:
             nurse_id=nurse_id,
             service_ids=unique_service_ids
         )
-        service_items = [ServiceResponse.model_validate(ns.service) for ns in result]
+        service_items = [NursingServiceResponse.model_validate(ns.service) for ns in result]
+
+        delete_cache(f"user_{nurse_id}")
 
         return NurseServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
-        )
+        )        
     
     def remove_service_from_nurse(self, nurse_id: uuid.UUID) -> bool:
         """
@@ -235,5 +238,6 @@ class NurseAssociateService:
             )
 
         self.nurse_service_repo.delete_all_by_nurse(nurse_id=nurse_id)
+        delete_cache(f"user_{nurse_id}")
         return True
         

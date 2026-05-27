@@ -7,6 +7,8 @@ logger = logging.getLogger(__name__)
 PATIENT_CACHE_TTL = 900
 # Default TTL for patient cache entries (60 minutes/1 hour)
 SERVICE_CACHE_TTL = 3600
+NURSE_CACHE_TTL = 900
+
 
 def set_cache(key, value, ex=None):
     """

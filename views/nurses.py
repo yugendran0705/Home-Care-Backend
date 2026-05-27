@@ -12,7 +12,6 @@ import models
 from schemas.nurses import *
 from schemas.nurse_services import NurseServicesResponse
 from schemas.nurse_documents import *
-from repositories.nursing_services import NursingServiceRepository
 from services.nurse_services import NurseAssociateService
 
 # Create API router

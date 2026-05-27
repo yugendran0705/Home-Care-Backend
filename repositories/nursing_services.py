@@ -1,4 +1,4 @@
-# /repositories/services.py
+# /repositories/nursing_services.py
 
 import uuid
 from typing import List, Optional, Dict, Any
@@ -32,7 +32,7 @@ class NursingServiceRepository:
             service_in (ServiceCreate): A Pydantic schema with the new service data.
 
         Returns:
-            models.Service: The newly created Service ORM object.
+            models.NursingService: The newly created NursingService ORM object.
         """
         db_service = models.NursingService(**service_in.model_dump())
 
@@ -49,7 +49,7 @@ class NursingServiceRepository:
             service_id (uuid.UUID): The ID of the service to retrieve.
 
         Returns:
-            Optional[models.Service]: The Service object if found, otherwise None.
+            Optional[models.NursingService]: The NursingService object if found, otherwise None.
         """
         return self.db.get(models.NursingService, service_id)
 
@@ -61,7 +61,7 @@ class NursingServiceRepository:
             service_name (str): The name of the service.
 
         Returns:
-            Optional[models.Service]: The Service object if found, otherwise None.
+            Optional[models.NursingService]: The NursingService object if found, otherwise None.
         """
         statement = select(models.NursingService).where(
             models.NursingService.service_name == service_name
@@ -79,7 +79,7 @@ class NursingServiceRepository:
             updates (Dict[str, Any]): A dictionary of fields to update.
 
         Returns:
-            Optional[models.Service]: The updated Service object, or None if not found.
+            Optional[models.NursingService]: The updated NursingService object, or None if not found.
         """
         db_service = self.get_by_id(service_id=service_id)
         if not db_service:
@@ -102,7 +102,7 @@ class NursingServiceRepository:
             limit (int): The maximum number of records to return.
 
         Returns:
-            List[models.Service]: A list of Service objects.
+            List[models.NursingService]: A list of NursingService objects.
         """
         statement = select(models.NursingService).offset(skip).limit(limit)
         return self.db.execute(statement).scalars().all()
@@ -117,7 +117,7 @@ class NursingServiceRepository:
             service_id (uuid.UUID): The ID of the service to delete.
 
         Returns:
-            Optional[models.Service]: The deleted Service object, or None if not found.
+            Optional[models.NursingService]: The deleted NursingService object, or None if not found.
         """
         db_service = self.get_by_id(service_id=service_id)
         if not db_service:

@@ -15,7 +15,7 @@ import sqlalchemy as sa
 revision: str = "add_database_indexes"
 down_revision: Union[str, Sequence[str], None] = "ce655b1b3ada"
 branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = "ccae44bc4921"
 
 
 def upgrade() -> None:

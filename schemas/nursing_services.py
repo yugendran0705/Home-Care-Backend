@@ -1,4 +1,4 @@
-# /schemas/service.py
+# /schemas/nursing_services.py
 
 import uuid
 from typing import Optional
@@ -30,7 +30,7 @@ class NursingServiceBase(BaseModel):
         True, description="Indicates if the service is currently active."
     )
     is_qualified: Optional[bool] = Field(
-        False, description="Indicates if the service has been soft-deleted."
+        False, description="Indicates if the nurse should be qualified to provide the service."
     )
     is_continuous: Optional[bool] = Field(
         None,

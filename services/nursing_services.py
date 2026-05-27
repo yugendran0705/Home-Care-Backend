@@ -1,5 +1,5 @@
 
-# /services/services.py
+# /services/nursing_services.py
 
 import uuid
 from typing import List, Optional, Dict, Any
@@ -32,10 +32,10 @@ class NursingServiceService:
         Creates a new service.
 
         Args:
-            service_in (ServiceCreate): The data for the new service.
+            service_in (NursingServiceCreate): The data for the new service.
 
         Returns:
-            models.Service: The newly created service object.
+            models.NursingService: The newly created service object.
 
         Raises:
             HTTPException: If a service with the same name already exists.
@@ -66,7 +66,7 @@ class NursingServiceService:
             service_id (uuid.UUID): The ID of the service to retrieve.
 
         Returns:
-            models.Service: The service object.
+            models.NursingService: The service object.
 
         Raises:
             HTTPException: If the service is not found.
@@ -87,10 +87,10 @@ class NursingServiceService:
 
         Args:
             service_id (uuid.UUID): The ID of the service to update.
-            updates (ServiceUpdate): The data to update.
+            updates (NursingServiceUpdate): The data to update.
 
         Returns:
-            models.Service: The updated service object.
+            models.NursingService: The updated service object.
         """
         # First, ensure the service exists
         self.get_service_by_id(service_id=service_id)
@@ -116,7 +116,7 @@ class NursingServiceService:
             limit (int): Maximum number of records to return.
 
         Returns:
-            List[models.Service]: A list of service objects.
+            List[models.NursingService]: A list of service objects.
         """
         return self.service_repo.list_all(skip=skip, limit=limit)
 

@@ -28,7 +28,7 @@ class NurseAssociatedServiceRepository:
             nurse_id (uuid.UUID): The ID of the nurse.
             service_id (uuid.UUID): The ID of the service.
         Returns:
-            Optional[models.NurseAssocitedService]: The NurseAssociatedService association object if found, else None.
+            Optional[models.NurseAssociatedService]: The NurseAssociatedService association object if found, else None.
         """
         statement = select(models.NurseAssociatedService).options(
             selectinload(models.NurseAssociatedService.nurse),

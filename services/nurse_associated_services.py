@@ -1,4 +1,4 @@
-# /services/nurse_services.py
+# /services/nurse_associated_services.py
 import uuid
 from typing import List
 
@@ -6,19 +6,19 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 # Import necessary components
-from repositories.nurse_services import NurseServiceRepository
+from repositories.nurse_associated_services import NurseAssociatedServiceRepository
 from repositories.nurses import NurseRepository
 from repositories.nursing_services import NursingServiceRepository
 from schemas.nurses import NurseResponse
-from schemas.nurse_services import (
-    NurseServiceBulkCreate,
-    NurseServicesResponse,
+from schemas.nurse_associated_services import (
+    NurseAssociatedServiceBulkCreate,
+    NurseAssociatedServicesResponse,
 )
 from schemas.nursing_services import NursingServiceResponse
 from utils.redis import delete_cache
 
 
-class NurseAssociateService:
+class NurseAssociatedServiceService:
     """
     Service layer for handling all business logic related to Nurse-Service associations.
     """
@@ -28,19 +28,19 @@ class NurseAssociateService:
         Initializes the service with a shared database session.
         """
         self.db = db
-        self.nurse_service_repo = NurseServiceRepository(db)
+        self.nurse_service_repo = NurseAssociatedServiceRepository(db)
         self.nurse_repo = NurseRepository(db)
         self.service_repo = NursingServiceRepository(db)
 
-    def assign_service_to_nurse(self, nurse_id, nurse_service_in: NurseServiceBulkCreate) -> NurseServicesResponse:
+    def assign_service_to_nurse(self, nurse_id, nurse_service_in: NurseAssociatedServiceBulkCreate) -> NurseAssociatedServicesResponse:
         """
         Assigns multiple services to a single nurse using bulk create.
 
         Args:
-            nurse_service_in (NurseServiceBulkCreate): The service assignment data.
+            nurse_service_in (NurseAssociatedServiceBulkCreate): The service assignment data.
 
         Returns:
-            NurseServicesResponse: The created nurse-service assignment summary.
+            NurseAssociatedServicesResponse: The created nurse-service assignment summary.
 
         Raises:
             HTTPException: If validation fails.
@@ -113,12 +113,12 @@ class NurseAssociateService:
             service_ids=unique_service_ids
         )
 
-        return NurseServicesResponse(
+        return NurseAssociatedServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=[NursingServiceResponse.model_validate(ns.service) for ns in result]
         )
 
-    def get_services_for_nurse(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
+    def get_services_for_nurse(self, nurse_id: uuid.UUID) -> NurseAssociatedServicesResponse:
         """
         Retrieves all services offered by a specific nurse.
 
@@ -126,7 +126,7 @@ class NurseAssociateService:
             nurse_id (uuid.UUID): The nurse's ID.
 
         Returns:
-            NurseServicesResponse: Nested nurse profile with service list.
+            NurseAssociatedServicesResponse: Nested nurse profile with service list.
 
         Raises:
             HTTPException: If nurse not found.
@@ -142,13 +142,13 @@ class NurseAssociateService:
 
         nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
         service_items = [NursingServiceResponse.model_validate(ns.service) for ns in nurse_services]
-        return NurseServicesResponse(
+        return NurseAssociatedServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )
         
 
-    def update_services_for_nurse(self, nurse_id: uuid.UUID, service_ids: List[uuid.UUID]) -> NurseServicesResponse:
+    def update_services_for_nurse(self, nurse_id: uuid.UUID, service_ids: List[uuid.UUID]) -> NurseAssociatedServicesResponse:
         """
         Updates the services for a nurse by replacing the old list with a new one.
 
@@ -157,7 +157,7 @@ class NurseAssociateService:
             service_ids (List[uuid.UUID]): The new list of service IDs to assign to the nurse.
 
         Returns:
-            NurseServicesResponse: The updated nurse profile with new services.
+            NurseAssociatedServicesResponse: The updated nurse profile with new services.
 
         Raises:
             HTTPException: If validation fails.
@@ -211,7 +211,7 @@ class NurseAssociateService:
 
         delete_cache(f"user_{nurse_id}")
 
-        return NurseServicesResponse(
+        return NurseAssociatedServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )        

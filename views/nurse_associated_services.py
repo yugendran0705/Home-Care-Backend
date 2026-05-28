@@ -1,4 +1,4 @@
-# /views/nurse_services.py
+# /views/nurse_associated_services.py
 
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,19 +6,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 # Import dependencies, services, models, and schemas
 from config.database import get_db
 from utils.roleChecker import RoleChecker
-from services.nurse_services import NurseAssociateService
+from services.nurse_associated_services import NurseAssociatedServiceService
 import models
-from schemas.nurse_services import NurseServiceBulkCreate, NurseServicesResponse
+from schemas.nurse_associated_services import NurseAssociatedServiceBulkCreate, NurseAssociatedServicesResponse
 
 # Create API router
 router = APIRouter(
     prefix="/nurses",
-    tags=["Nurse Services"]
+    tags=["NurseAssociatedServices"]
 )
 
 # Dependency to provide the NurseAssociateService
-def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociateService:
-    return NurseAssociateService(db)
+def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociatedServiceService:
+    return NurseAssociatedServiceService(db)
 
 # Define role-based access dependencies
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
@@ -28,14 +28,14 @@ user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse", "Patient"
 
 @router.post(
     "/services",
-    response_model=NurseServicesResponse,
+    response_model=NurseAssociatedServicesResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Assign multiple services to a nurse"
 )
 async def assign_service_to_nurse(
-    service_in: NurseServiceBulkCreate,
+    service_in: NurseAssociatedServiceBulkCreate,
     current_user: models.User = nurse_dependency,
-    service: NurseAssociateService = Depends(get_nurse_service_associate)
+    service: NurseAssociatedServiceService = Depends(get_nurse_service_associate)
 ):
     """
     Assigns multiple services to a specific nurse using a single bulk request.
@@ -58,13 +58,13 @@ async def assign_service_to_nurse(
 
 @router.get(
     "/{nurse_id}/services",
-    response_model=NurseServicesResponse,
+    response_model=NurseAssociatedServicesResponse,
     dependencies=[user_dependency],
     summary="Get all services offered by a nurse"
 )
 async def get_nurse_services(
     nurse_id: uuid.UUID,
-    service: NurseAssociateService = Depends(get_nurse_service_associate)
+    service: NurseAssociatedServiceService = Depends(get_nurse_service_associate)
 ):
     """
     Retrieves all services offered by a specific nurse.
@@ -83,14 +83,14 @@ async def get_nurse_services(
 
 @router.put(
     "/services",
-    response_model=NurseServicesResponse,
+    response_model=NurseAssociatedServicesResponse,
     summary="Update services for a nurse",
     status_code=status.HTTP_200_OK
 )
 async def update_nurse_services(
-    service_in: NurseServiceBulkCreate,
+    service_in: NurseAssociatedServiceBulkCreate,
     current_user: models.User = nurse_dependency,
-    service: NurseAssociateService = Depends(get_nurse_service_associate),
+    service: NurseAssociatedServiceService = Depends(get_nurse_service_associate),
 ):
     """
     Updates the services offered by a nurse.
@@ -101,7 +101,7 @@ async def update_nurse_services(
             nurse_id=current_user.id,
             service_ids=service_in.service_ids,
         )
-        return NurseServicesResponse.model_validate(updated_association)
+        return NurseAssociatedServicesResponse.model_validate(updated_association)
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -119,7 +119,7 @@ async def update_nurse_services(
 )
 async def remove_service_from_nurse(
     nurse_id: uuid.UUID,
-    service: NurseAssociateService = Depends(get_nurse_service_associate)
+    service: NurseAssociatedServiceService = Depends(get_nurse_service_associate)
 ):
     """
     Removes all services from a specific nurse's profile.
@@ -133,7 +133,9 @@ async def remove_service_from_nurse(
     except HTTPException as e:
         raise e
     except Exception as e:
+        print(f"Unexpected error while removing services : {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {str(e)}"
         )
+        

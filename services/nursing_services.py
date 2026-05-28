@@ -168,7 +168,7 @@ class NursingServiceService:
                 detail="Cannot delete service with existing bookings.",
             )
 
-        if service.nurse_services:
+        if service.nurse_associated_services:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Cannot delete service that is assigned to nurses.",

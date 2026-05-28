@@ -62,7 +62,7 @@ class Nurse(Base):
     # Relationships
     user = relationship("User", back_populates="nurse", uselist=False)
     primary_address = relationship("Address", primaryjoin="Nurse.address_id == Address.id") # For nurse's primary address
-    nurse_services = relationship("NurseService", back_populates="nurse")
+    nurse_associated_services = relationship("NurseAssociatedService", back_populates="nurse")
     availability = relationship("Availability", back_populates="nurse")
     bookings = relationship("Booking", back_populates="nurse")
     reviews = relationship("Review", back_populates="nurse")
@@ -101,18 +101,18 @@ class NursingService(Base):
     is_qualified = Column(Boolean, nullable=False, default=False)
 
     # Relationships
-    nurse_services = relationship("NurseService", back_populates="service")
+    nurse_associated_services = relationship("NurseAssociatedService", back_populates="service")
     bookings = relationship("Booking", back_populates="service")
 
-class NurseService(Base):
-    __tablename__ = "nurse_services"
+class NurseAssociatedService(Base):
+    __tablename__ = "nurse_associated_services"
     # Composite primary key for the junction table
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), primary_key=True)
     service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), primary_key=True)
 
     # Relationships
-    nurse = relationship("Nurse", back_populates="nurse_services")
-    service = relationship("NursingService", back_populates="nurse_services")
+    nurse = relationship("Nurse", back_populates="nurse_associated_services")
+    service = relationship("NursingService", back_populates="nurse_associated_services")
 
 class Availability(Base):
     __tablename__ = "availability"

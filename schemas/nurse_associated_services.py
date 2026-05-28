@@ -10,13 +10,13 @@ from .nurses import NurseResponse
 from .nursing_services import NursingServiceResponse
 
 
-class NurseServiceBase(BaseModel):
+class NurseAssociatedServiceBase(BaseModel):
     """
     Base schema for the nurse-service link.
     """
     service_id: uuid.UUID
 
-class NurseServiceBulkCreate(BaseModel):
+class NurseAssociatedServiceBulkCreate(BaseModel):
     """
     Schema for assigning multiple services to a single nurse.
     """
@@ -26,7 +26,7 @@ class NurseServiceBulkCreate(BaseModel):
         description="A list of service IDs to link to the nurse."
     )
 
-class NurseServicesResponse(BaseModel):
+class NurseAssociatedServicesResponse(BaseModel):
     """
     Nested response schema containing nurse profile and service list.
     """

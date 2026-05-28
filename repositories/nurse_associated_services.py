@@ -1,4 +1,4 @@
-# /repositories/nurse_services.py
+# /repositories/nurse_associated_services.py
 
 import uuid
 from typing import List, Optional
@@ -9,9 +9,9 @@ from sqlalchemy import select, and_
 import models
 
 
-class NurseServiceRepository:
+class NurseAssociatedServiceRepository:
     """
-    Repository for the NurseService association table.
+    Repository for the NurseAssociatedService association table.
     """
 
     def __init__(self, db: Session):
@@ -20,7 +20,7 @@ class NurseServiceRepository:
         """
         self.db = db
 
-    def get_one(self, *, nurse_id: uuid.UUID, service_id: uuid.UUID) -> Optional[models.NurseService]:
+    def get_one(self, *, nurse_id: uuid.UUID, service_id: uuid.UUID) -> Optional[models.NurseAssociatedService]:
         """
         Retrieves a single nurse-service association by nurse_id and service_id.
 
@@ -28,20 +28,20 @@ class NurseServiceRepository:
             nurse_id (uuid.UUID): The ID of the nurse.
             service_id (uuid.UUID): The ID of the service.
         Returns:
-            Optional[models.NurseService]: The NurseService association object if found, else None.
+            Optional[models.NurseAssocitedService]: The NurseAssociatedService association object if found, else None.
         """
-        statement = select(models.NurseService).options(
-            selectinload(models.NurseService.nurse),
-            selectinload(models.NurseService.service)
+        statement = select(models.NurseAssociatedService).options(
+            selectinload(models.NurseAssociatedService.nurse),
+            selectinload(models.NurseAssociatedService.service)
         ).where(
             and_(
-                models.NurseService.nurse_id == nurse_id,
-                models.NurseService.service_id == service_id
+                models.NurseAssociatedService.nurse_id == nurse_id,
+                models.NurseAssociatedService.service_id == service_id
             )
         )
         return self.db.execute(statement).scalar_one_or_none()
 
-    def get_by_nurse(self, *, nurse_id: uuid.UUID) -> List[models.NurseService]:
+    def get_by_nurse(self, *, nurse_id: uuid.UUID) -> List[models.NurseAssociatedService]:
         """
         Retrieves all services offered by a specific nurse.
 
@@ -49,15 +49,15 @@ class NurseServiceRepository:
             nurse_id (uuid.UUID): The ID of the nurse.
 
         Returns:
-            List[models.NurseService]: A list of NurseService association objects.
+            List[models.NurseAssociatedService]: A list of NurseAssociatedService association objects.
         """
-        statement = select(models.NurseService).options(
-            selectinload(models.NurseService.nurse),
-            selectinload(models.NurseService.service)
-        ).where(models.NurseService.nurse_id == nurse_id)
+        statement = select(models.NurseAssociatedService).options(
+            selectinload(models.NurseAssociatedService.nurse),
+            selectinload(models.NurseAssociatedService.service)
+        ).where(models.NurseAssociatedService.nurse_id == nurse_id)
         return self.db.execute(statement).scalars().all()
 
-    def get_by_service(self, *, service_id: uuid.UUID) -> List[models.NurseService]:
+    def get_by_service(self, *, service_id: uuid.UUID) -> List[models.NurseAssociatedService]:
         """
         Retrieves all nurses who offer a specific service.
 
@@ -65,12 +65,12 @@ class NurseServiceRepository:
             service_id (uuid.UUID): The ID of the service.
 
         Returns:
-            List[models.NurseService]: A list of NurseService association objects.
+            List[models.NurseAssociatedService]: A list of NurseAssociatedService association objects.
         """
-        statement = select(models.NurseService).options(
-            selectinload(models.NurseService.nurse),
-            selectinload(models.NurseService.service)
-        ).where(models.NurseService.service_id == service_id)
+        statement = select(models.NurseAssociatedService).options(
+            selectinload(models.NurseAssociatedService.nurse),
+            selectinload(models.NurseAssociatedService.service)
+        ).where(models.NurseAssociatedService.service_id == service_id)
         return self.db.execute(statement).scalars().all()
 
     def delete_all_by_nurse(self, *, nurse_id: uuid.UUID) -> int:
@@ -84,8 +84,8 @@ class NurseServiceRepository:
             int: The number of services removed.
         """
         try:
-            self.db.query(models.NurseService)\
-                .filter(models.NurseService.nurse_id == nurse_id)\
+            self.db.query(models.NurseAssociatedService)\
+                .filter(models.NurseAssociatedService.nurse_id == nurse_id)\
                 .delete(synchronize_session=False)
             self.db.commit()
         except Exception:
@@ -98,7 +98,7 @@ class NurseServiceRepository:
         *,
         nurse_id: uuid.UUID,
         service_ids: List[uuid.UUID]
-    ) -> List[models.NurseService]:
+    ) -> List[models.NurseAssociatedService]:
         """
         Bulk creates nurse-service associations for a single nurse.
 
@@ -107,7 +107,7 @@ class NurseServiceRepository:
             service_ids (List[uuid.UUID]): List of service IDs to assign to the nurse.
 
         Returns:
-            List[models.NurseService]: The newly created NurseService associations.
+            List[models.NurseAssociatedService]: The newly created NurseAssociatedService associations.
         
         Raises:
             Exception: If there's a database integrity error (e.g., duplicate entries, invalid IDs).
@@ -118,7 +118,7 @@ class NurseServiceRepository:
         db_nurse_services = []
         for service_id in service_ids:
             db_nurse_services.append(
-                models.NurseService(
+                models.NurseAssociatedService(
                     nurse_id=nurse_id,
                     service_id=service_id
                 )
@@ -132,27 +132,27 @@ class NurseServiceRepository:
             raise
 
         # Fetch the created records with relationships loaded
-        statement = select(models.NurseService).options(
-            selectinload(models.NurseService.nurse),
-            selectinload(models.NurseService.service)
+        statement = select(models.NurseAssociatedService).options(
+            selectinload(models.NurseAssociatedService.nurse),
+            selectinload(models.NurseAssociatedService.service)
         ).where(
             and_(
-                models.NurseService.nurse_id == nurse_id,
-                models.NurseService.service_id.in_(service_ids)
+                models.NurseAssociatedService.nurse_id == nurse_id,
+                models.NurseAssociatedService.service_id.in_(service_ids)
             )
         )
         return self.db.execute(statement).scalars().all()
     
-    def get_all(self) -> List[models.NurseService]:
+    def get_all(self) -> List[models.NurseAssociatedService]:
         """
         Retrieves all nurse-service associations.
 
         Returns:
-            List[models.NurseService]: A list of all NurseService association objects.
+            List[models.NurseAssociatedService]: A list of all NurseAssociatedService association objects.
         """
-        statement = select(models.NurseService).options(
-            selectinload(models.NurseService.nurse),
-            selectinload(models.NurseService.service)
+        statement = select(models.NurseAssociatedService).options(
+            selectinload(models.NurseAssociatedService.nurse),
+            selectinload(models.NurseAssociatedService.service)
         )
         return self.db.execute(statement).scalars().all()
     
@@ -161,7 +161,7 @@ class NurseServiceRepository:
         *,
         nurse_id: uuid.UUID,
         service_ids: List[uuid.UUID]
-    ) -> List[models.NurseService]:
+    ) -> List[models.NurseAssociatedService]:
         """
         Atomically replaces all services for a nurse in a single transaction.
         Deletes existing associations and creates new ones without intermediate commits.
@@ -171,15 +171,15 @@ class NurseServiceRepository:
             service_ids (List[uuid.UUID]): List of service IDs to assign to the nurse.
 
         Returns:
-            List[models.NurseService]: The newly created NurseService associations.
+            List[models.NurseAssociatedService]: The newly created NurseService associations.
         
         Raises:
             Exception: If there's a database integrity error (e.g., duplicate entries, invalid IDs).
         """
         try:
             # Delete existing associations
-            self.db.query(models.NurseService)\
-                .filter(models.NurseService.nurse_id == nurse_id)\
+            self.db.query(models.NurseAssociatedService)\
+                .filter(models.NurseAssociatedService.nurse_id == nurse_id)\
                 .delete(synchronize_session=False)
             
             # Create new associations if any service_ids provided
@@ -187,7 +187,7 @@ class NurseServiceRepository:
                 db_nurse_services = []
                 for service_id in service_ids:
                     db_nurse_services.append(
-                        models.NurseService(
+                        models.NurseAssociatedService(
                             nurse_id=nurse_id,
                             service_id=service_id
                         )
@@ -199,13 +199,13 @@ class NurseServiceRepository:
             
             # Fetch the created records with relationships loaded
             if service_ids:
-                statement = select(models.NurseService).options(
-                    selectinload(models.NurseService.nurse),
-                    selectinload(models.NurseService.service)
+                statement = select(models.NurseAssociatedService).options(
+                    selectinload(models.NurseAssociatedService.nurse),
+                    selectinload(models.NurseAssociatedService.service)
                 ).where(
                     and_(
-                        models.NurseService.nurse_id == nurse_id,
-                        models.NurseService.service_id.in_(service_ids)
+                        models.NurseAssociatedService.nurse_id == nurse_id,
+                        models.NurseAssociatedService.service_id.in_(service_ids)
                     )
                 )
                 return self.db.execute(statement).scalars().all()

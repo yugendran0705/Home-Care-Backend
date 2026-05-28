@@ -10,9 +10,9 @@ from utils.roleChecker import RoleChecker
 from services.nurses import NurseService
 import models
 from schemas.nurses import *
-from schemas.nurse_services import NurseServicesResponse
+from schemas.nurse_associated_services import NurseAssociatedServicesResponse
 from schemas.nurse_documents import *
-from services.nurse_services import NurseAssociateService
+from services.nurse_associated_services import NurseAssociatedServiceService
 
 # Create API router
 router = APIRouter(
@@ -24,8 +24,8 @@ router = APIRouter(
 def get_nurse_service(db=Depends(get_db)) -> NurseService:
     return NurseService(db)
 
-def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociateService:
-    return NurseAssociateService(db)
+def get_nurse_service_associate(db=Depends(get_db)) -> NurseAssociatedServiceService:
+    return NurseAssociatedServiceService(db)
 
 
 # Define role-based access dependencies
@@ -104,7 +104,7 @@ def upload_nurse_document(
 
 
 @router.get("/me", 
-            response_model=NurseServicesResponse, 
+            response_model=NurseAssociatedServicesResponse, 
             summary="Get current nurse's profile",
             status_code=status.HTTP_200_OK)
 def get_my_profile(
@@ -130,7 +130,7 @@ def get_my_profile(
 
 
 @router.put("/me", 
-            response_model=NurseServicesResponse, 
+            response_model=NurseAssociatedServicesResponse, 
             summary="Update current nurse's profile",
             status_code=status.HTTP_200_OK)
 def update_my_profile(
@@ -202,7 +202,7 @@ def deactivate_my_account(
 
 @router.get(
     "/one/{nurse_id}",
-    response_model=NurseServicesResponse,
+    response_model=NurseAssociatedServicesResponse,
     summary="Get nurse profile by ID (Admin Access)",
     dependencies=[admin_dependency],
     status_code=status.HTTP_200_OK
@@ -230,7 +230,7 @@ def get_nurse_by_id_as_admin(
 
 @router.patch(
     "/{nurse_id}/verify",
-    response_model=NurseServicesResponse,
+    response_model=NurseAssociatedServicesResponse,
     status_code=status.HTTP_200_OK,
     summary="Verify a nurse's account",
     dependencies=[admin_dependency]

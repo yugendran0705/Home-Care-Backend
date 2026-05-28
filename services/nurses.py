@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 # Import necessary components
 from repositories.nurses import NurseRepository
-from repositories.nurse_services import NurseServiceRepository
+from repositories.nurse_associated_services import NurseAssociatedServiceRepository
 from repositories.nurse_documents import NurseDocumentRepository # Import the new repository
 from repositories.nursing_services import NursingServiceRepository  # <- for validating service IDs during registration
 from services.users import UserService
@@ -20,7 +20,7 @@ import models
 from schemas.nurses import NurseCreate, NurseCreateResponse, NurseResponse
 from schemas.address import AddressCreate as AddressCreateSchema
 from schemas.nurse_documents import NurseDocumentCreate # Import the new schema
-from schemas.nurse_services import NurseServicesResponse
+from schemas.nurse_associated_services import NurseAssociatedServicesResponse
 from schemas.nursing_services import NursingServiceResponse
 from config.security import create_access_token, create_refresh_token
 
@@ -45,7 +45,7 @@ class NurseService:
         self.user_service = UserService(db)
         self.address_service = AddressService(db)
         self.doc_repo = NurseDocumentRepository(db) # Initialize the document repository
-        self.nurse_service_repo = NurseServiceRepository(db)
+        self.nurse_service_repo = NurseAssociatedServiceRepository(db)
         self.service_repo = NursingServiceRepository(db)  # used for service existence checks
 
     def create_nurse_and_user_account(
@@ -202,7 +202,7 @@ class NurseService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-    def get_nurse_profile(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
+    def get_nurse_profile(self, nurse_id: uuid.UUID) -> NurseAssociatedServicesResponse:
         """
         Retrieves a nurse's profile by their ID along with their services.
         """
@@ -213,7 +213,7 @@ class NurseService:
         if cached_data:
             try:
                 nurse_dict = json.loads(cached_data.decode('utf-8'))
-                nurse_response = NurseServicesResponse(**nurse_dict)
+                nurse_response = NurseAssociatedServicesResponse(**nurse_dict)
                 logger.debug(f"Cache hit for user {nurse_id}")
                 return nurse_response
         
@@ -233,7 +233,7 @@ class NurseService:
         nurse_services = self.nurse_service_repo.get_by_nurse(nurse_id=nurse_id)
         service_items = [NursingServiceResponse.model_validate(ns.service) for ns in nurse_services]
         # Convert to Pydantic model
-        nurse_profile_response =  NurseServicesResponse(
+        nurse_profile_response =  NurseAssociatedServicesResponse(
             nurse=NurseResponse.model_validate(nurse),
             services=service_items,
         )
@@ -251,7 +251,7 @@ class NurseService:
 
     def update_nurse_profile(
         self, nurse_id: uuid.UUID, updates: Dict[str, Any]
-    ) -> NurseServicesResponse:
+    ) -> NurseAssociatedServicesResponse:
         """
         Updates a nurse's profile information.
         """
@@ -275,7 +275,7 @@ class NurseService:
         delete_cache(f"user_{nurse_id}")
         return self.user_service.deactivate_user(user_id=nurse_id)
 
-    def verify_nurse_account(self, nurse_id: uuid.UUID) -> NurseServicesResponse:
+    def verify_nurse_account(self, nurse_id: uuid.UUID) -> NurseAssociatedServicesResponse:
         """
         Verifies a nurse's account.
         """

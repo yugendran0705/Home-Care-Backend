@@ -214,8 +214,8 @@ The database includes **42 strategic indexes** across all tables to optimize que
 | **payments** | 4 | patient_id, payment_status, payment_date, composite (patient_id, payment_status) |
 | **reviews** | 3 | patient_id, nurse_id, review_date |
 | **addresses** | 2 | user_id, composite (city, state) |
-| **services** | 2 | is_active, is_qualified |
-| **nurse_services** | 1 | service_id *(nurse_id covered by composite PK)* |
+| **nursing_services** | 2 | is_active, is_qualified |
+| **nurse_associated_services** | 1 | service_id *(nurse_id covered by composite PK)* |
 | **nurse_documents** | 2 | nurse_id, verification_status |
 | **patients** | 1 | address_id |
 
@@ -230,7 +230,7 @@ The database includes **42 strategic indexes** across all tables to optimize que
 - ✅ Date/time columns indexed for range queries and sorting
 - ✅ Composite indexes for multi-column queries
 - ✅ Removed redundant indexes (e.g., `users.email` already has unique index)
-- ✅ Composite PK on `nurse_services(nurse_id, service_id)` covers nurse_id queries
+- ✅ Composite PK on `nurse_associated_services(nurse_id, service_id)` covers nurse_id queries
 
 ### Redis Caching
 

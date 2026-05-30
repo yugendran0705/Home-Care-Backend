@@ -77,24 +77,21 @@ class UserService:
     def authenticate_user(self, email: str, password: str) -> Optional[Dict[str, str]]:
         """
         Business logic to authenticate a user.
-
-        1. Fetches the user by email.
-        2. Verifies the password.
-        3. Checks if the user is active.
-        4. Creates and returns access and refresh tokens if successful.
-
-        Args:
-            email (str): The user's email.
-            password (str): The user's plain-text password.
-
-        Returns:
-            Optional[Dict[str, str]]: A dictionary with tokens, or None if auth fails.
         """
         user = self.user_repo.get_user_by_email(email)
         
         # Case 1: User does not exist or password is incorrect
-        if not user or not self.verify_password(password, user.password_hash):
-            return None
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found."
+            )
+        
+        if not self.verify_password(password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect password."
+            )
 
         # Case 2: User is inactive
         if not user.is_active:

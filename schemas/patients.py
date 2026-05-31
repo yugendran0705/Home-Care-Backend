@@ -52,20 +52,19 @@ class PatientUpdate(BaseModel):
 class PatientResponse(PatientBase):
     """
     Schema for API responses. This is the public-facing model that structures the
-    data sent to the client, including nested user and address information.
+    data sent to the client, including nested user information and addresses.
     """
     id: uuid.UUID
-    # Nest the full UserResponse schema to include user details
+    # Nest the full UserResponse schema to include user details and addresses
     user: UserResponse
-    # Nest the AddressResponse schema for the patient's primary address
-    primary_address: Optional[AddressResponse] = None
+    
 
     class Config:
         """
         Pydantic configuration to allow creating this schema from a SQLAlchemy ORM model.
         """
         from_attributes = True
-
+        
 class PatientCreateResponse(BaseModel):
     access_token: str
     refresh_token: str

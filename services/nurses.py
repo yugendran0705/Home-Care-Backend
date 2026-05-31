@@ -124,16 +124,12 @@ class NurseService:
             }
             new_nurse = self.nurse_repo.create(nurse_data=nurse_profile_data)
 
-            # Step 4 (Optional): Create and link the primary address
+            # Step 4 (Optional): Create the primary address for the user
             if address_data:
                 address_schema = AddressCreateSchema(**address_data.model_dump())
-                new_address = self.address_service.create_address_for_user(
+                self.address_service.create_address_for_user(
                     address_in=address_schema,
                     user_id=new_user.id
-                )
-                new_nurse = self.nurse_repo.update(
-                    nurse_id=new_nurse.id,
-                    updates={"address_id": new_address.id}
                 )
             
             # Step 5 (Optional): Bulk create and link services

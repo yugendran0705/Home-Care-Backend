@@ -92,17 +92,12 @@ class PatientService:
             }
             new_patient = self.patient_repo.create(patient_profile_data)
 
-            # Step 3 (Optional): Create and link the primary address
+            # Step 3 (Optional): Create the address for the user
             if address_data:
                 address_schema = AddressCreate(**address_data)
-                new_address = self.address_service.create_address_for_user(
+                self.address_service.create_address_for_user(
                     address_in=address_schema,
                     user_id=new_user.id
-                )
-                # Set the created address as the patient's primary address
-                new_patient = self.patient_repo.update(
-                    patient=new_patient,
-                    updates={"address_id": new_address.id, "is_primary": True}
                 )
             
             # Reload patient with relationships to ensure they're eagerly loaded

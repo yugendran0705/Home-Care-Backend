@@ -3,7 +3,7 @@
 import uuid
 from typing import List, Optional, Dict, Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 
 # Adjust the import path based on your project structure
@@ -52,7 +52,8 @@ class NurseRepository:
         Returns:
             Optional[models.Nurse]: The Nurse object if found, otherwise None.
         """
-        return self.db.get(models.Nurse, nurse_id)
+        statement = select(models.Nurse).where(models.Nurse.id == nurse_id).options(joinedload(models.Nurse.user).selectinload(models.User.addresses))
+        return self.db.execute(statement).unique().scalar_one_or_none()
 
     def get_by_license_number(self, *, license_number: str) -> Optional[models.Nurse]:
         """
@@ -101,8 +102,8 @@ class NurseRepository:
         Returns:
             List[models.Nurse]: A list of Nurse objects.
         """
-        statement = select(models.Nurse).offset(skip).limit(limit)
-        return self.db.execute(statement).scalars().all()
+        statement = select(models.Nurse).offset(skip).limit(limit).options(joinedload(models.Nurse.user).selectinload(models.User.addresses))
+        return self.db.execute(statement).unique().scalars().all()
 
     def delete(self, *, nurse_id: uuid.UUID) -> Optional[models.Nurse]:
         """

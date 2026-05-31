@@ -2,8 +2,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, EmailStr
+from .address import Address as AddressResponse
 
 class UserResponse(BaseModel):
     """Schema for safely exposing user data in API responses."""
@@ -14,6 +15,7 @@ class UserResponse(BaseModel):
     password_hash: Optional[str] = None
     created_at: datetime
     last_login_at: Optional[datetime] = None
+    addresses: List[AddressResponse] = []
 
     class Config:
         from_attributes = True

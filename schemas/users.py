@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from .address import Address as AddressResponse
 
 class UserResponse(BaseModel):
@@ -15,7 +15,7 @@ class UserResponse(BaseModel):
     password_hash: Optional[str] = None
     created_at: datetime
     last_login_at: Optional[datetime] = None
-    addresses: List[AddressResponse] = []
+    addresses: List[AddressResponse] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

@@ -1,7 +1,7 @@
 """Remove address_id from Patient and Nurse tables
 
 Revision ID: remove_address_id
-Revises: 45910d2620a6
+Revises: 79f915f97305
 Create Date: 2026-05-30
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'remove_address_id'
-down_revision: Union[str, Sequence[str], None] = '45910d2620a6'
+down_revision: Union[str, Sequence[str], None] = '79f915f97305'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -34,11 +34,9 @@ def upgrade() -> None:
         type_='foreignkey'
     )
     
-    # Drop the index on patients.address_id
-    op.drop_index('ix_patients_address_id', table_name='patients')
-    
-    # Drop the index on nurses.address_id
-    op.drop_index('ix_nurses_address_id', table_name='nurses')
+    # Indexes on address_id are removed when the column is dropped.
+    # Do not drop them explicitly here, as they may already have been removed
+    # by an earlier migration (690e351fd44e) in some branches.
     
     # Drop the address_id column from patients table
     op.drop_column('patients', 'address_id')
@@ -55,11 +53,9 @@ def downgrade() -> None:
     # Add address_id column back to nurses table
     op.add_column('nurses', sa.Column('address_id', sa.UUID(), nullable=True))
     
-    # Recreate the index on patients.address_id
-    op.create_index('ix_patients_address_id', 'patients', ['address_id'], unique=False)
-    
-    # Recreate the index on nurses.address_id
-    op.create_index('ix_nurses_address_id', 'nurses', ['address_id'], unique=False)
+    # Note: Do not recreate indexes here. The immediate down_revision (690e351fd44e)
+    # does not have these indexes, and its downgrade() will create them, which would
+    # fail if they already exist.
     
     # Recreate the foreign key constraint for patients.address_id
     op.create_foreign_key(

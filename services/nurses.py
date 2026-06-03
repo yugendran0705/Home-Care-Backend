@@ -124,7 +124,7 @@ class NurseService:
             }
             new_nurse = self.nurse_repo.create(nurse_data=nurse_profile_data)
 
-            # Step 4 (Optional): Create the primary address for the user
+            # Step 4 (Optional): Create address for the user
             if address_data:
                 address_schema = AddressCreateSchema(**address_data.model_dump())
                 self.address_service.create_address_for_user(

@@ -5,7 +5,7 @@ from datetime import date
 from typing import Optional, List
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field
-from .nursing_services import NursingServiceBase, NursingServiceCreate, NursingServiceUpdate, NursingServiceResponse
+from .nursing_services import NursingServiceResponse
 
 
 

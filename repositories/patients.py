@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import uuid
 import models

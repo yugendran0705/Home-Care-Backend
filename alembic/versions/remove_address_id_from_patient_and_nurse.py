@@ -13,6 +13,8 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'remove_address_id'
+# Base this migration on the current merge head to avoid creating a new
+# unintended branch/head in Alembic history.
 down_revision: Union[str, Sequence[str], None] = '79f915f97305'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

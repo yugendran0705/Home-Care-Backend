@@ -23,18 +23,13 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema - remove address_id from Patient and Nurse tables."""
     # Drop the foreign key constraint for patients.address_id
-    op.drop_constraint(
-        'patients_address_id_fkey',
-        'patients',
-        type_='foreignkey'
-    )
+    # Drop the foreign key constraint for patients.address_id (if present)
+    op.execute("ALTER TABLE patients DROP CONSTRAINT IF EXISTS patients_address_id_fkey")
+
     
-    # Drop the foreign key constraint for nurses.address_id
-    op.drop_constraint(
-        'nurses_address_id_fkey',
-        'nurses',
-        type_='foreignkey'
-    )
+    # Drop the foreign key constraint for nurses.address_id (if present)
+    op.execute("ALTER TABLE nurses DROP CONSTRAINT IF EXISTS nurses_address_id_fkey")
+
     
     # Indexes on address_id are removed when the column is dropped.
     # Do not drop them explicitly here, as they may already have been removed

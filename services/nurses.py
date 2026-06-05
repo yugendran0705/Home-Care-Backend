@@ -126,7 +126,7 @@ class NurseService:
 
             # Step 4 (Optional): Create address for the user
             if address_data:
-                address_schema = AddressCreateSchema(**address_data.model_dump())
+                address_schema = AddressCreateSchema(**{**address_data.model_dump(), "is_primary": True})
                 self.address_service.create_address_for_user(
                     address_in=address_schema,
                     user_id=new_user.id

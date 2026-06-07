@@ -1,8 +1,9 @@
 import uuid
 from sqlalchemy import (
-    Column, String, Boolean, Float, ForeignKey, Text, Integer, DateTime, Date, UUID, Numeric
+    Column, String, Boolean, Float, Time, ForeignKey, Text, Integer, DateTime, Date, UUID, Numeric
 )
-from sqlalchemy.orm import relationship
+from geoalchemy2 import Geography
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func # For default=func.now()
 
@@ -76,6 +77,7 @@ class Address(Base):
     country = Column(String(100), nullable=False, default='India')
     latitude = Column(Numeric(10, 8), nullable=True) # Nullable
     longitude = Column(Numeric(11, 8), nullable=True) # Nullable
+    location = Column(Geography(geometry_type='POINT', srid=4326), spatial_index=True)
     is_primary = Column(Boolean, nullable=False, default=False)
 
     # Relationships
@@ -110,20 +112,10 @@ class NurseAssociatedService(Base):
     nurse = relationship("Nurse", back_populates="nurse_associated_services")
     service = relationship("NursingService", back_populates="nurse_associated_services")
 
-class Availability(Base):
-    __tablename__ = "availability"
-    id = Column("availability_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), nullable=False)
-    start_time = Column(DateTime(timezone=True), nullable=False)
-    end_time = Column(DateTime(timezone=True), nullable=False)
-    is_booked = Column(Boolean, nullable=False, default=False)
-
-    # Relationships
-    nurse = relationship("Nurse", back_populates="availability")
-
 class Booking(Base):
     __tablename__ = "bookings"
     id = Column("booking_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    parent_booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.booking_id"), nullable=True)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.patient_id"), nullable=False)
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), nullable=False)
     service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), nullable=False)
@@ -143,6 +135,7 @@ class Booking(Base):
     booking_address = relationship("Address", primaryjoin="Booking.booking_address_id == Address.id")
     review = relationship("Review", back_populates="booking", uselist=False) # One review per booking
     payment = relationship("Payment", back_populates="booking", uselist=False) # One payment per booking
+    child_bookings = relationship("Booking", backref=backref('parent', remote_side=[id]))
 
 class Review(Base):
     __tablename__ = "reviews"
@@ -187,3 +180,37 @@ class NurseDocument(Base):
     verified_at = Column(DateTime(timezone=True), nullable=True)
 
     nurse = relationship("Nurse", back_populates="documents")
+
+class WorkingHours(Base):
+    """
+    Stores the recurring weekly schedule for a nurse.
+    """
+    __tablename__ = "working_hours"
+    id = Column("working_hours_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id", ondelete="CASCADE"), nullable=False)
+    
+    # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+    day_of_week = Column(Integer, nullable=False) 
+    
+    start_time = Column(Time(timezone=True), nullable=False)
+    end_time = Column(Time(timezone=True), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    # Relationship back to the nurse
+    nurse = relationship("Nurse", backref="working_hours")
+
+
+class BlackoutDate(Base):
+    """
+    Stores specific vacation or time-off dates where a nurse is unavailable.
+    """
+    __tablename__ = "blackout_dates"
+    id = Column("blackout_date_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id", ondelete="CASCADE"), nullable=False)
+    
+    start_datetime = Column(DateTime(timezone=True), nullable=False)
+    end_datetime = Column(DateTime(timezone=True), nullable=False)
+    reason = Column(String(255), nullable=True) # E.g., "Sick leave", "Vacation"
+
+    # Relationship back to the nurse
+    nurse = relationship("Nurse", backref="blackout_dates")

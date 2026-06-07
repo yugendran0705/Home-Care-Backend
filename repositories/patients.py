@@ -28,8 +28,7 @@ class PatientRepository:
         """
         return (
             self.db.query(models.Patient)
-            .options(joinedload(models.Patient.user))
-            .options(joinedload(models.Patient.primary_address))
+            .options(joinedload(models.Patient.user).selectinload(models.User.addresses))
             .filter(models.Patient.id == patient_id)
             .first()
         )
@@ -40,8 +39,7 @@ class PatientRepository:
         """
         return (
             self.db.query(models.Patient)
-            .options(joinedload(models.Patient.user))
-            .options(joinedload(models.Patient.primary_address))
+            .options(joinedload(models.Patient.user).selectinload(models.User.addresses))
             .offset(skip)
             .limit(limit)
             .all()

@@ -5,7 +5,9 @@ from datetime import date
 from typing import Optional, List
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field
-from .nursing_services import NursingServiceBase, NursingServiceResponse
+from .nursing_services import NursingServiceResponse
+
+
 
 # Import other schemas for nesting
 from .users import UserResponse
@@ -72,24 +74,22 @@ class NurseUpdate(BaseModel):
 class NurseResponse(NurseBase):
     """
     Schema for returning a nurse's profile from the API.
-    Includes nested user and address information.
+    Includes nested user information and addresses.
     """
     id: uuid.UUID
     is_verified: bool
     average_rating: Decimal
     user: UserResponse
-    primary_address: Optional[AddressResponse] = None
-
+    
     class Config:
         from_attributes = True
+        
+   
 
 class NurseCreateResponse(BaseModel):
     access_token: str
     refresh_token: str
     nurse: NurseResponse
     services: List[NursingServiceResponse]
-
-                  
-
     class Config:
         from_attributes = True

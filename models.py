@@ -32,11 +32,9 @@ class Patient(Base):
     phone_number = Column(String(20), unique=True, nullable=False)
     date_of_birth = Column(Date, nullable=True) # Nullable
     gender = Column(String(10), nullable=True, comment='ENUM: Male, Female, Other') # Nullable
-    address_id = Column(UUID(as_uuid=True), ForeignKey("addresses.address_id"), nullable=True) # Nullable, as per DBML relationship definition
 
     # Relationships
     user = relationship("User", back_populates="patient", uselist=False)
-    primary_address = relationship("Address", primaryjoin="Patient.address_id == Address.id") # For patient's primary address
     bookings = relationship("Booking", back_populates="patient")
     reviews = relationship("Review", back_populates="patient")
     payments = relationship("Payment", back_populates="patient")
@@ -57,11 +55,9 @@ class Nurse(Base):
     is_qualified = Column(Boolean, nullable=True, default=False)
     is_active = Column(Boolean, nullable=True, default=True)
     average_rating = Column(Numeric(3, 2), nullable=False, default=0.00) # DECIMAL(3,2) mapped to Numeric
-    address_id = Column(UUID(as_uuid=True), ForeignKey("addresses.address_id"), nullable=True) # Nullable
 
     # Relationships
     user = relationship("User", back_populates="nurse", uselist=False)
-    primary_address = relationship("Address", primaryjoin="Nurse.address_id == Address.id") # For nurse's primary address
     nurse_associated_services = relationship("NurseAssociatedService", back_populates="nurse")
     availability = relationship("Availability", back_populates="nurse")
     bookings = relationship("Booking", back_populates="nurse")

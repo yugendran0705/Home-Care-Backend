@@ -104,7 +104,7 @@ class AddressService:
     def update_primary_address(self, user_id: uuid.UUID, address_id: uuid.UUID) -> AddressModel:
         """
         Updates the primary address for a user, ensuring only one address can be primary.
-        Also updates the patients.address_id if the user is a patient.
+        The system relies on addresses.is_primary to identify the primary address.
         Invalidates user cache to prevent stale address data.
         """
         db_address = self.get_address_by_id(address_id=address_id)
@@ -117,13 +117,6 @@ class AddressService:
             address=db_address,
             updates={"is_primary": True}
         )
-
-        patient = self.patient_repo.get_by_id(patient_id=user_id)
-        if patient:
-            self.patient_repo.update(
-                patient=patient,
-                updates={"address_id": updated_address.id}
-            )
 
         # Invalidate user cache (harmless no-op if user has no cache)
         delete_cache(f"user_{user_id}")

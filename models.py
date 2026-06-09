@@ -60,7 +60,6 @@ class Nurse(Base):
     # Relationships
     user = relationship("User", back_populates="nurse", uselist=False)
     nurse_associated_services = relationship("NurseAssociatedService", back_populates="nurse")
-    availability = relationship("Availability", back_populates="nurse")
     bookings = relationship("Booking", back_populates="nurse")
     reviews = relationship("Review", back_populates="nurse")
     documents = relationship("NurseDocument", back_populates="nurse")
@@ -77,7 +76,7 @@ class Address(Base):
     country = Column(String(100), nullable=False, default='India')
     latitude = Column(Numeric(10, 8), nullable=True) # Nullable
     longitude = Column(Numeric(11, 8), nullable=True) # Nullable
-    location = Column(Geography(geometry_type='POINT', srid=4326), spatial_index=True)
+    location = Column(Geography(geometry_type='POINT', srid=4326, spatial_index=True))
     is_primary = Column(Boolean, nullable=False, default=False)
 
     # Relationships

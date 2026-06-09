@@ -1,98 +1,98 @@
 # services/bookings.py
-
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
 from datetime import datetime, timedelta
-from typing import List
 import uuid
 
 import models
+from repositories.bookings import BookingRepository
 from repositories.nursing_services import NursingServiceRepository
+from utils.time_calculator import calculate_end_time, get_total_days
 
 class BookingService:
     def __init__(self, db: Session):
         self.db = db
+        self.booking_repo = BookingRepository(db)
         self.service_repo = NursingServiceRepository(db)
 
-    def search_available_nurses(
+    def create_pending_booking(
         self, 
+        patient_id: uuid.UUID, 
+        nurse_id: uuid.UUID, 
         service_id: uuid.UUID, 
-        patient_lat: float, 
-        patient_lon: float, 
-        requested_start_time: datetime, 
-        requested_end_time: datetime,
-        search_radius_meters: int = 8000
-    ) -> List[models.Nurse]:
+        scheduled_start_time: datetime,
+        booking_address_id: uuid.UUID,
+        notes: str = None
+    ) -> models.Booking:
         """
-        The ultimate matching engine. Filters by Service, Location, Vacations, 
-        Existing Bookings, and specific Working Hours.
+        Creates a pending booking, branching into Parent-Child shifts if necessary.
         """
-        
-        # 1. Fetch the requested service to understand the job type
         service = self.service_repo.get_by_id(service_id)
         if not service:
             raise ValueError("Service not found.")
 
-        # 2. Define the Travel Buffer & PostGIS Target Point
-        travel_buffer = timedelta(hours=1)
-        buffered_start = requested_start_time - travel_buffer
-        buffered_end = requested_end_time + travel_buffer
-        
-        target_point = func.ST_SetSRID(func.ST_MakePoint(patient_lon, patient_lat), 4326)
+        # Shared base data for all booking records
+        base_booking_data = {
+            "patient_id": patient_id,
+            "nurse_id": nurse_id,
+            "service_id": service_id,
+            "booking_status": "Pending",
+            "total_amount": service.price, # Adjust billing logic here if needed
+            "payment_status": "Pending",
+            "booking_address_id": booking_address_id,
+            "notes": notes,
+            "parent_booking_id": None # Default to None
+        }
 
-        # --- EXCLUSION SUBQUERIES ---
-
-        # Exclude 1: Nurses who have a vacation overlapping with the request
-        overlapping_blackouts = self.db.query(models.BlackoutDate.nurse_id).filter(
-            models.BlackoutDate.start_datetime < requested_end_time,
-            models.BlackoutDate.end_datetime > requested_start_time
-        ).subquery()
-
-        # Exclude 2: Nurses who have an existing booking overlapping with the request + buffer
-        overlapping_bookings = self.db.query(models.Booking.nurse_id).filter(
-            models.Booking.booking_status == 'Confirmed',
-            models.Booking.scheduled_start_time < buffered_end,
-            models.Booking.scheduled_end_time > buffered_start
-        ).subquery()
-
-        # --- THE BASE QUERY (The "What" and "Where") ---
-        
-        query = self.db.query(models.Nurse).join(
-            models.NurseService, models.Nurse.id == models.NurseService.nurse_id
-        ).join(
-            models.Address, models.Nurse.address_id == models.Address.id
-        ).filter(
-            models.NurseService.service_id == service_id,
-            func.ST_DWithin(models.Address.location, target_point, search_radius_meters),
-            models.Nurse.is_verified == True,
-            # Apply Universal Exclusions
-            ~models.Nurse.id.in_(overlapping_blackouts),
-            ~models.Nurse.id.in_(overlapping_bookings)
-        )
-
-        # --- THE DYNAMIC TIME FILTER ("The When") ---
-        
-        if service.schedule_type == 'Daily_Shift' or service.duration_type in ['hours', 'hour']:
-            # For short jobs, we MUST ensure the requested time falls strictly inside their Working Hours
+        # -------------------------------------------------------------------
+        # BRANCH 1: Continuous Care (e.g., Live-in for 2 weeks)
+        # -------------------------------------------------------------------
+        if service.schedule_type == 'Continuous':
+            end_time = calculate_end_time(scheduled_start_time, service.duration, service.duration_type)
             
-            # Extract the day of the week (0=Mon, 6=Sun) and the raw times
-            req_day_of_week = requested_start_time.weekday()
-            req_start_time_only = requested_start_time.time()
-            req_end_time_only = requested_end_time.time()
+            booking_data = {
+                **base_booking_data,
+                "scheduled_start_time": scheduled_start_time,
+                "scheduled_end_time": end_time
+            }
+            return self.booking_repo.create(booking_data)
 
-            query = query.join(
-                models.WorkingHours, models.Nurse.id == models.WorkingHours.nurse_id
-            ).filter(
-                models.WorkingHours.is_active == True,
-                models.WorkingHours.day_of_week == req_day_of_week,
-                models.WorkingHours.start_time <= req_start_time_only,
-                models.WorkingHours.end_time >= req_end_time_only
-            )
+        # -------------------------------------------------------------------
+        # BRANCH 2: Daily Shifts (e.g., 8 hrs/day for 14 days)
+        # -------------------------------------------------------------------
+        elif service.schedule_type == 'Daily_Shift':
+            if not service.shift_duration_hours:
+                raise ValueError("Daily_Shift services must have a shift_duration_hours defined.")
+
+            # 1. Create the PARENT Booking (Acts as a wrapper for billing/UI)
+            parent_end_time = calculate_end_time(scheduled_start_time, service.duration, service.duration_type)
             
-        elif service.schedule_type == 'Continuous':
-            # For 24/7 jobs, we don't check WorkingHours. 
-            # If they survived the blackout/booking exclusions above, they are good to go.
-            pass
+            parent_data = {
+                **base_booking_data,
+                "scheduled_start_time": scheduled_start_time,
+                "scheduled_end_time": parent_end_time,
+            }
+            parent_booking = self.booking_repo.create(parent_data)
 
-        # Execute and return the fully filtered list of available nurses
-        return query.all()
+            # 2. Create the CHILD Bookings (The actual working shifts)
+            total_days = get_total_days(service.duration, service.duration_type)
+            child_bookings_data = []
+
+            for day_offset in range(total_days):
+                shift_start = scheduled_start_time + timedelta(days=day_offset)
+                shift_end = shift_start + timedelta(hours=service.shift_duration_hours)
+
+                child_data = {
+                    **base_booking_data,
+                    "parent_booking_id": parent_booking.id, # Link to parent
+                    "scheduled_start_time": shift_start,
+                    "scheduled_end_time": shift_end,
+                }
+                child_bookings_data.append(child_data)
+
+            # Insert all child shifts at once
+            self.booking_repo.bulk_create(child_bookings_data)
+
+            return parent_booking
+
+        else:
+            raise ValueError(f"Unknown schedule type: {service.schedule_type}")

@@ -39,6 +39,13 @@ class BookingRepository:
         self.db.refresh(db_booking)
         return db_booking
 
+    def bulk_create(self, bookings_data: List[Dict[str, Any]]) -> List[models.Booking]:
+        """Inserts multiple bookings in a single transaction."""
+        db_bookings = [models.Booking(**data) for data in bookings_data]
+        self.db.add_all(db_bookings)
+        self.db.commit()
+        return db_bookings
+
     def get_by_id(self, *, booking_id: uuid.UUID) -> Optional[models.Booking]:
         """
         Retrieves a booking by its primary key.

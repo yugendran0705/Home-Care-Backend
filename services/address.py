@@ -1,8 +1,10 @@
 # /services/address.py
 
 import uuid
+from decimal import Decimal
 from typing import List, Optional, Dict, Any
 
+from geoalchemy2.elements import WKTElement
 from repositories.address import AddressRepository
 from repositories.patients import PatientRepository
 from schemas.address import AddressCreate, AddressUpdate
@@ -25,6 +27,22 @@ class AddressService:
         self.db = db
         self.patient_repo = PatientRepository(db)
 
+    @staticmethod
+    def _build_location(
+        latitude: Optional[Decimal],
+        longitude: Optional[Decimal]
+    ) -> Optional[WKTElement]:
+        """
+        Builds a PostGIS POINT from latitude/longitude.
+        """
+        if latitude is None and longitude is None:
+            return None
+
+        if latitude is None or longitude is None:
+            raise ValueError("Both latitude and longitude must be provided together.")
+
+        return WKTElement(f"POINT({float(longitude)} {float(latitude)})", srid=4326)
+
     def create_address_for_user(self, address_in: AddressCreate, user_id: uuid.UUID) -> AddressModel:
         """
         Creates a new address and associates it with a user.
@@ -32,6 +50,10 @@ class AddressService:
         """
         address_data = address_in.model_dump()
         address_data["user_id"] = user_id
+        address_data["location"] = self._build_location(
+            latitude=address_data.get("latitude"),
+            longitude=address_data.get("longitude")
+        )
         
         try:
             new_address = self.address_repo.create(address_data=address_data)
@@ -67,6 +89,14 @@ class AddressService:
              raise ValueError("Address not found or not authorized to update.")
 
         update_data = address_in.model_dump(exclude_unset=True)
+
+        if "latitude" in update_data or "longitude" in update_data:
+            final_latitude = update_data.get("latitude", db_address.latitude)
+            final_longitude = update_data.get("longitude", db_address.longitude)
+            update_data["location"] = self._build_location(
+                latitude=final_latitude,
+                longitude=final_longitude
+            )
 
         if update_data.get("is_primary") is True:
             self.address_repo.deactivate_all_primary_addresses_for_user(user_id)

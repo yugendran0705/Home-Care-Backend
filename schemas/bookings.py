@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 # Import other schemas for nesting in the response
 from .patients import PatientResponse
@@ -30,9 +30,15 @@ class BookingBase(BaseModel):
     booking_address_id: uuid.UUID
     notes: Optional[str] = None
 
-    @validator('scheduled_end_time')
-    def end_time_must_be_after_start_time(cls, v, values):
-        if 'scheduled_start_time' in values and v <= values['scheduled_start_time']:
+    @field_validator('scheduled_end_time')
+    @classmethod
+    def end_time_must_be_after_start_time(
+        cls,
+        v: datetime,
+        info: ValidationInfo
+    ) -> datetime:
+        start_time = info.data.get('scheduled_start_time')
+        if start_time and v <= start_time:
             raise ValueError('Scheduled end time must be after start time')
         return v
 

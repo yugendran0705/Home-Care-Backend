@@ -28,23 +28,16 @@ class BlackoutDateRepository:
         return db_blackout
 
     def get_by_id(
-        self,
-        *,
-        blackout_date_id: uuid.UUID
+        self, *, blackout_date_id: uuid.UUID
     ) -> Optional[models.BlackoutDate]:
 
-        statement = (
-            select(models.BlackoutDate)
-            .where(models.BlackoutDate.id == blackout_date_id)
+        statement = select(models.BlackoutDate).where(
+            models.BlackoutDate.id == blackout_date_id
         )
 
         return self.db.execute(statement).scalar_one_or_none()
 
-    def get_by_nurse_id(
-        self,
-        *,
-        nurse_id: uuid.UUID
-    ) -> List[models.BlackoutDate]:
+    def get_by_nurse_id(self, *, nurse_id: uuid.UUID) -> List[models.BlackoutDate]:
 
         statement = (
             select(models.BlackoutDate)
@@ -55,15 +48,10 @@ class BlackoutDateRepository:
         return self.db.execute(statement).scalars().all()
 
     def update(
-        self,
-        *,
-        blackout_date_id: uuid.UUID,
-        updates: Dict[str, Any]
+        self, *, blackout_date_id: uuid.UUID, updates: Dict[str, Any]
     ) -> Optional[models.BlackoutDate]:
 
-        db_blackout = self.get_by_id(
-            blackout_date_id=blackout_date_id
-        )
+        db_blackout = self.get_by_id(blackout_date_id=blackout_date_id)
 
         if not db_blackout:
             return None
@@ -77,15 +65,9 @@ class BlackoutDateRepository:
 
         return db_blackout
 
-    def delete(
-        self,
-        *,
-        blackout_date_id: uuid.UUID
-    ) -> Optional[models.BlackoutDate]:
+    def delete(self, *, blackout_date_id: uuid.UUID) -> Optional[models.BlackoutDate]:
 
-        db_blackout = self.get_by_id(
-            blackout_date_id=blackout_date_id
-        )
+        db_blackout = self.get_by_id(blackout_date_id=blackout_date_id)
 
         if not db_blackout:
             return None
@@ -94,7 +76,7 @@ class BlackoutDateRepository:
         self.db.commit()
 
         return db_blackout
-      
+
     def find_overlapping(
         self,
         *,
@@ -104,20 +86,15 @@ class BlackoutDateRepository:
         exclude_blackout_id: Optional[uuid.UUID] = None
     ) -> List[models.BlackoutDate]:
 
-        statement = (
-            select(models.BlackoutDate)
-            .where(
-                and_(
-                    models.BlackoutDate.nurse_id == nurse_id,
-                    models.BlackoutDate.start_datetime < end_datetime,
-                    models.BlackoutDate.end_datetime > start_datetime,
-                )
+        statement = select(models.BlackoutDate).where(
+            and_(
+                models.BlackoutDate.nurse_id == nurse_id,
+                models.BlackoutDate.start_datetime < end_datetime,
+                models.BlackoutDate.end_datetime > start_datetime,
             )
         )
 
         if exclude_blackout_id:
-            statement = statement.where(
-                models.BlackoutDate.id != exclude_blackout_id
-            )
+            statement = statement.where(models.BlackoutDate.id != exclude_blackout_id)
 
         return self.db.execute(statement).scalars().all()

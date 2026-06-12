@@ -93,7 +93,7 @@ def get_blackout_date(
     try:
         blackout_date = service.get_blackout_date(blackout_date_id=blackout_date_id)
 
-        if not blackout_date and blackout_date.nurse_id != current_user.id:
+        if not blackout_date or blackout_date.nurse_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Blackout date not found or not authorized to view this blackout date.",
@@ -127,7 +127,7 @@ def update_blackout_date(
     try:
         blackout_date = service.get_blackout_date(blackout_date_id=blackout_date_id)
 
-        if not blackout_date and blackout_date.nurse_id != current_user.id:
+        if not blackout_date or blackout_date.nurse_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Blackout date not found or not authorized to view this blackout date.",
@@ -162,7 +162,7 @@ def delete_blackout_date(
     try:
         blackout_date = service.get_blackout_date(blackout_date_id=blackout_date_id)
 
-        if not blackout_date and blackout_date.nurse_id != current_user.id:
+        if not blackout_date or blackout_date.nurse_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Blackout date not found or not authorized to view this blackout date.",

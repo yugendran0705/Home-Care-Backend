@@ -1,7 +1,6 @@
 # services/blackout_dates.py
 
 import uuid
-from typing import Dict, Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class BlackoutDateService:
     """
-    Service layer for handling all business logic related to Black_out Dates.
+    Service layer for handling all business logic related to Blackout Dates.
     It orchestrates blackout creation and management.
     """
 
@@ -72,6 +71,8 @@ class BlackoutDateService:
 
         except Exception as e:
             self.db.rollback()
+
+            logger.exception("Failed to create blackout date for nurse_id=%s", nurse_id)
 
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -185,8 +186,12 @@ class BlackoutDateService:
 
             return updated_blackout
 
-        except Exception as e:
+        except Exception:
             self.db.rollback()
+
+            logger.exception(
+                "Failed to update blackout date blackout_date_id=%s", blackout_date_id
+            )
 
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

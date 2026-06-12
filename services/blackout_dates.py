@@ -89,7 +89,7 @@ class BlackoutDateService:
             models.BlackoutDate: Blackout date ORM object.
         """
 
-        logger.debug(f"Fetching blackout for nurse {blackout_date_id} from database")
+        logger.debug(f"Fetching blackout date {blackout_date_id} from database")
         blackout_date = self.blackout_repo.get_by_id(blackout_date_id=blackout_date_id)
 
         if not blackout_date:
@@ -111,7 +111,7 @@ class BlackoutDateService:
         Returns:
             list[models.BlackoutDate]
         """
-
+        logger.debug(f"Fetching blackout date for nurse {nurse_id} from database")
         blackout_dates = self.blackout_repo.get_by_nurse_id(nurse_id=nurse_id)
 
         return blackout_dates
@@ -146,12 +146,6 @@ class BlackoutDateService:
 
         end_datetime = update_data.get("end_datetime", blackout_date.end_datetime)
 
-        if start_datetime >= end_datetime:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Start datetime must be before end datetime.",
-            )
-
         if start_datetime is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -162,6 +156,12 @@ class BlackoutDateService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="End datetime cannot be null.",
+            )
+
+        if start_datetime >= end_datetime:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start datetime must be before end datetime.",
             )
 
         overlapping_blackouts = self.blackout_repo.find_overlapping(

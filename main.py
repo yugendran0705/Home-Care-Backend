@@ -10,8 +10,8 @@ from views import (
     address,
     nurses,
     nursing_services,
-    blackout_dates,
     working_hours,
+    blackout_dates,
 )
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -46,8 +46,8 @@ app.include_router(address.router, prefix="/api/v1")
 app.include_router(nurses.router, prefix="/api/v1")
 app.include_router(nursing_services.router, prefix="/api/v1")
 app.include_router(nurse_associated_services.router, prefix="/api/v1")
-app.include_router(blackout_dates.router, prefix="/api/v1")
 app.include_router(working_hours.router, prefix="/api/v1")
+app.include_router(blackout_dates.router, prefix="/api/v1")
 
 
 @app.get("/")

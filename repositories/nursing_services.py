@@ -171,11 +171,11 @@ class NursingServiceRepository:
         # --- THE BASE QUERY (The "What" and "Where") ---
         
         query = self.db.query(models.Nurse).join(
-            models.NurseAssociatedService, models.Nurse.id == models.NurseAssociatedService.nurse_id
+            models.NurseService, models.Nurse.id == models.NurseService.nurse_id
         ).join(
             models.Address, models.Nurse.address_id == models.Address.id
         ).filter(
-            models.NurseAssociatedService.service_id == service_id,
+            models.NurseService.service_id == service_id,
             func.ST_DWithin(models.Address.location, target_point, search_radius_meters),
             models.Nurse.is_verified == True,
             # Apply Universal Exclusions

@@ -175,7 +175,7 @@ def update_working_hours(
 
 
 @router.delete(
-    "/one/{working_hours_id}",
+    "/{working_hours_id}",
     status_code=status.HTTP_200_OK,
     summary="Delete a working hours slot",
 )

@@ -31,6 +31,30 @@ def upgrade() -> None:
 
     if 'nurse_services' in table_names:
         op.rename_table('nurse_services', 'nurse_associated_services')
+        op.drop_constraint(
+            op.f('nurse_services_nurse_id_fkey'),
+            'nurse_associated_services',
+            type_='foreignkey',
+        )
+        op.drop_constraint(
+            op.f('nurse_services_service_id_fkey'),
+            'nurse_associated_services',
+            type_='foreignkey',
+        )
+        op.create_foreign_key(
+            op.f('nurse_associated_services_nurse_id_fkey'),
+            'nurse_associated_services',
+            'nurses',
+            ['nurse_id'],
+            ['nurse_id'],
+        )
+        op.create_foreign_key(
+            op.f('nurse_associated_services_service_id_fkey'),
+            'nurse_associated_services',
+            'nursing_services',
+            ['service_id'],
+            ['service_id'],
+        )
 
 
 def downgrade() -> None:
@@ -43,4 +67,28 @@ def downgrade() -> None:
         return
 
     if 'nurse_associated_services' in table_names:
+        op.drop_constraint(
+            op.f('nurse_associated_services_nurse_id_fkey'),
+            'nurse_associated_services',
+            type_='foreignkey',
+        )
+        op.drop_constraint(
+            op.f('nurse_associated_services_service_id_fkey'),
+            'nurse_associated_services',
+            type_='foreignkey',
+        )
         op.rename_table('nurse_associated_services', 'nurse_services')
+        op.create_foreign_key(
+            op.f('nurse_services_nurse_id_fkey'),
+            'nurse_services',
+            'nurses',
+            ['nurse_id'],
+            ['nurse_id'],
+        )
+        op.create_foreign_key(
+            op.f('nurse_services_service_id_fkey'),
+            'nurse_services',
+            'nursing_services',
+            ['service_id'],
+            ['service_id'],
+        )

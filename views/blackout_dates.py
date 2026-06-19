@@ -44,8 +44,8 @@ def create_blackout_date(
             nurse_id=current_user.id, blackout_data=blackout_in
         )
 
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
 
     except Exception as e:
         print(f"Error creating blackout date: {e}")
@@ -68,8 +68,8 @@ def get_my_blackout_dates(
     try:
         return service.get_nurse_blackout_dates(nurse_id=current_user.id)
 
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
 
     except Exception as e:
         print(f"Error fetching blackout dates: {e}")
@@ -91,18 +91,14 @@ def get_blackout_date(
     service: BlackoutDateService = Depends(get_blackout_date_service),
 ):
     try:
-        blackout_date = service.get_blackout_date(blackout_date_id=blackout_date_id)
-
-        if not blackout_date or blackout_date.nurse_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Blackout date not found or not authorized to view this blackout date.",
-            )
+        blackout_date = service.get_blackout_date(
+            nurse_id=current_user.id, blackout_date_id=blackout_date_id
+        )
 
         return blackout_date
 
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
 
     except Exception as e:
         print(f"Error fetching blackout date: {e}")
@@ -125,20 +121,15 @@ def update_blackout_date(
     service: BlackoutDateService = Depends(get_blackout_date_service),
 ):
     try:
-        blackout_date = service.get_blackout_date(blackout_date_id=blackout_date_id)
-
-        if not blackout_date or blackout_date.nurse_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Blackout date not found or not authorized to view this blackout date.",
-            )
 
         return service.update_blackout_date(
-            blackout_date_id=blackout_date_id, updates=blackout_update
+            nurse_id=current_user.id,
+            blackout_date_id=blackout_date_id,
+            updates=blackout_update,
         )
 
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
 
     except Exception as e:
         print(f"Error updating blackout date: {e}")
@@ -160,20 +151,15 @@ def delete_blackout_date(
     service: BlackoutDateService = Depends(get_blackout_date_service),
 ):
     try:
-        blackout_date = service.get_blackout_date(blackout_date_id=blackout_date_id)
 
-        if not blackout_date or blackout_date.nurse_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Blackout date not found or not authorized to view this blackout date.",
-            )
-
-        service.delete_blackout_date(blackout_date_id=blackout_date_id)
+        service.delete_blackout_date(
+            nurse_id=current_user.id, blackout_date_id=blackout_date_id
+        )
 
         return None
 
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
 
     except Exception as e:
         print(f"Error deleting blackout date: {e}")

@@ -79,7 +79,9 @@ class BlackoutDateService:
                 detail="Failed to create blackout date",
             )
 
-    def get_blackout_date(self, blackout_date_id: uuid.UUID) -> models.BlackoutDate:
+    def get_blackout_date(
+        self, nurse_id: uuid.UUID, blackout_date_id: uuid.UUID
+    ) -> models.BlackoutDate:
         """
         Retrieves a blackout date by its ID.
 
@@ -93,9 +95,10 @@ class BlackoutDateService:
         logger.debug(f"Fetching blackout date {blackout_date_id} from database")
         blackout_date = self.blackout_repo.get_by_id(blackout_date_id=blackout_date_id)
 
-        if not blackout_date:
+        if not blackout_date or blackout_date.nurse_id != nurse_id:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Blackout date not found."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Blackout date not found or not authorized to view this blackout date.",
             )
 
         return blackout_date
@@ -118,7 +121,10 @@ class BlackoutDateService:
         return blackout_dates
 
     def update_blackout_date(
-        self, blackout_date_id: uuid.UUID, updates: BlackoutDateUpdate
+        self,
+        nurse_id: uuid.UUID,
+        blackout_date_id: uuid.UUID,
+        updates: BlackoutDateUpdate,
     ) -> models.BlackoutDate:
         """
         Updates a blackout date.
@@ -133,9 +139,10 @@ class BlackoutDateService:
 
         blackout_date = self.blackout_repo.get_by_id(blackout_date_id=blackout_date_id)
 
-        if not blackout_date:
+        if not blackout_date or blackout_date.nurse_id != nurse_id:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Blackout date not found."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Blackout date not found or not authorized to view this blackout date.",
             )
 
         update_data = updates.model_dump(exclude_unset=True)
@@ -200,6 +207,7 @@ class BlackoutDateService:
 
     def delete_blackout_date(
         self,
+        nurse_id: uuid.UUID,
         blackout_date_id: uuid.UUID,
     ) -> bool:
         """
@@ -208,9 +216,10 @@ class BlackoutDateService:
 
         blackout_date = self.blackout_repo.get_by_id(blackout_date_id=blackout_date_id)
 
-        if not blackout_date:
+        if not blackout_date or blackout_date.nurse_id != nurse_id:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Blackout date not found."
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Blackout date not found or not authorized to view this blackout date.",
             )
 
         self.blackout_repo.delete(blackout_date_id=blackout_date_id)

@@ -36,7 +36,7 @@ class BookingService:
             "nurse_id": nurse_id,
             "service_id": service_id,
             "booking_status": "Pending",
-            "total_amount": service.price, # Adjust billing logic here if needed
+            "total_amount": service.base_price,
             "payment_status": "Pending",
             "booking_address_id": booking_address_id,
             "notes": notes,
@@ -70,6 +70,7 @@ class BookingService:
                 **base_booking_data,
                 "scheduled_start_time": scheduled_start_time,
                 "scheduled_end_time": parent_end_time,
+                "is_parent_booking": True
             }
             parent_booking = self.booking_repo.create(parent_data)
 

@@ -56,7 +56,7 @@ class Nurse(Base):
     is_qualified = Column(Boolean, nullable=True, default=False)
     is_active = Column(Boolean, nullable=True, default=True)
     average_rating = Column(Numeric(3, 2), nullable=False, default=0.00) # DECIMAL(3,2) mapped to Numeric
-
+    continuous_care_available = Column(Boolean, nullable=False, default=False)
     # Relationships
     user = relationship("User", back_populates="nurse", uselist=False)
     nurse_associated_services = relationship("NurseAssociatedService", back_populates="nurse")
@@ -92,7 +92,7 @@ class NursingService(Base):
     base_price = Column(Numeric(10, 2), nullable=False, default=0.00) # DECIMAL(10,2) mapped to Numeric
     duration = Column(Integer, nullable=True) # Nullable
     duration_type = Column(String(20), nullable=True, comment='ENUM: Minutes, Hours, Days') # Nullable
-    is_continuous = Column(Boolean)
+    schedule_type = Column(String(20), nullable=False, comment='ENUM: Continuous, Daily_Shift')
     shift_duration_hours = Column(Integer)
     is_active = Column(Boolean, nullable=False, default=True)
     is_qualified = Column(Boolean, nullable=False, default=False)
@@ -118,6 +118,7 @@ class Booking(Base):
     patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.patient_id"), nullable=False)
     nurse_id = Column(UUID(as_uuid=True), ForeignKey("nurses.nurse_id"), nullable=False)
     service_id = Column(UUID(as_uuid=True), ForeignKey("nursing_services.service_id"), nullable=False)
+    is_parent_booking = Column(Boolean, nullable=False, default=False)
     booking_time = Column(DateTime(timezone=True), nullable=False, default=func.now())
     scheduled_start_time = Column(DateTime(timezone=True), nullable=False)
     scheduled_end_time = Column(DateTime(timezone=True), nullable=False)

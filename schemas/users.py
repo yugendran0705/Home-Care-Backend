@@ -12,7 +12,6 @@ class UserResponse(BaseModel):
     email: EmailStr
     user_type: str
     is_active: bool
-    password_hash: Optional[str] = None
     created_at: datetime
     last_login_at: Optional[datetime] = None
     addresses: List[AddressResponse] = Field(default_factory=list)

@@ -3,7 +3,7 @@ import models
 import uuid
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
 
 from repositories.working_hours import WorkingHoursRepository
 from schemas.working_hours import WorkingHoursCreate, WorkingHoursUpdate
@@ -177,9 +177,6 @@ class WorkingHoursService:
         )
         effective_end_time = update_data.get(
             "end_time", db_working_hours.end_time
-        )
-        effective_is_active = update_data.get(
-            "is_active", db_working_hours.is_active
         )
 
         if effective_start_time and effective_end_time and effective_end_time <= effective_start_time:

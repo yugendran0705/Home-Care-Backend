@@ -2,8 +2,7 @@ import uuid
 from datetime import time
 from typing import List, Optional, Dict, Any
 
-from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 import models
 
@@ -62,7 +61,16 @@ class WorkingHoursRepository:
             Optional[models.WorkingHours]: The found record or None.
         """
 
-        return self.db.get(models.WorkingHours, working_hours_id)
+        return (
+             self.db.query(models.WorkingHours)
+             .options(
+                 joinedload(models.WorkingHours.nurse)
+                 .joinedload(models.Nurse.user)
+                 .selectinload(models.User.addresses)
+             )
+             .filter(models.WorkingHours.id == working_hours_id)
+             .first()
+         )
 
     def get_for_nurse(self, *, nurse_id: uuid.UUID) -> List[models.WorkingHours]:
         """Fetch all working hours records for a nurse.
@@ -74,9 +82,16 @@ class WorkingHoursRepository:
             List[models.WorkingHours]: All working hours slots for the nurse.
         """
 
-        query = self.db.query(models.WorkingHours).filter(models.WorkingHours.nurse_id == nurse_id)
-
-        return query.all()
+        return (
+             self.db.query(models.WorkingHours)
+             .options(
+                 joinedload(models.WorkingHours.nurse)
+                 .joinedload(models.Nurse.user)
+                 .selectinload(models.User.addresses)
+             )
+             .filter(models.WorkingHours.nurse_id == nurse_id)
+             .all()
+         )
 
     def update(self, *, working_hours_id: uuid.UUID, updates: Dict[str, Any]) -> Optional[models.WorkingHours]:
         """Update a working hours record.

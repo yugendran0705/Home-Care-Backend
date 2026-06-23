@@ -34,7 +34,7 @@ class WorkingHoursCreate(WorkingHoursBase):
 class WorkingHoursUpdate(BaseModel):
     """Schema for partial updates to a working-hours record.
 
-    All fields are optional to support PATCH-style updates.
+    All fields are optional to support partial updates.
     """
 
     day_of_week: Optional[int] = Field(None, ge=0, le=6)

@@ -25,7 +25,7 @@ def get_working_hours_service(db: Session = Depends(get_db)) -> WorkingHoursServ
     return WorkingHoursService(db)
 
 # Define role-based access dependencies
-nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
+nurse_dependency = Depends(RoleChecker(allowed_roles=["Nurse"]))
 user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse", "Patient"]))
 
 

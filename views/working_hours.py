@@ -9,20 +9,21 @@ from utils.roleChecker import RoleChecker
 from services.working_hours import WorkingHoursService
 import models
 from schemas.working_hours import (
+    NurseWorkingHoursResponse,
     WorkingHoursCreate,
+    WorkingHoursListItemResponse,
     WorkingHoursUpdate,
     WorkingHoursResponse,
 )
 
 # Create API router
-router = APIRouter(
-    prefix="/working_hours",
-    tags=["WorkingHours"]
-)
+router = APIRouter(prefix="/working_hours", tags=["WorkingHours"])
+
 
 # Dependency to provide the WorkingHoursService
 def get_working_hours_service(db: Session = Depends(get_db)) -> WorkingHoursService:
     return WorkingHoursService(db)
+
 
 # Define role-based access dependencies
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Nurse"]))
@@ -59,7 +60,7 @@ def create_working_hours_for_nurse(
 
 @router.post(
     "/bulk",
-    response_model=List[WorkingHoursResponse],
+    response_model=NurseWorkingHoursResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create multiple working hours slots for the current nurse",
 )
@@ -72,9 +73,13 @@ def bulk_create_working_hours_for_nurse(
     Creates multiple working hours slots for the authenticated nurse.
     """
     try:
-        return service.bulk_create_working_hours(
+        created_working_hours = service.bulk_create_working_hours(
             nurse_id=current_user.id,
             working_hours_data=working_hours_data,
+        )
+        return NurseWorkingHoursResponse(
+            nurse=current_user,
+            working_hours=created_working_hours,
         )
     except HTTPException as e:
         raise e
@@ -113,7 +118,7 @@ def get_working_hours_by_id(
 
 @router.get(
     "/nurse/{nurse_id}",
-    response_model=List[WorkingHoursResponse],
+    response_model=NurseWorkingHoursResponse,
     summary="Get working hours for a nurse",
     status_code=status.HTTP_200_OK,
 )
@@ -127,7 +132,15 @@ def get_working_hours_for_nurse(
     A patient, nurse, or admin may view nurse availability.
     """
     try:
-        return service.get_working_hours_for_nurse(nurse_id=nurse_id)
+        working_hours = service.get_working_hours_for_nurse(nurse_id=nurse_id)
+        nurse = None
+        if working_hours:
+            nurse = working_hours[0].nurse
+
+        return NurseWorkingHoursResponse(
+            nurse=nurse,
+            working_hours=working_hours,
+        )
     except HTTPException as e:
         raise e
     except Exception as e:

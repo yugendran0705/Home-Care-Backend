@@ -45,12 +45,33 @@ class WorkingHoursUpdate(BaseModel):
 
 
 class WorkingHoursResponse(WorkingHoursBase):
-    """Response schema returned by the API for working-hours records."""
+    """Response schema returned by the API for a single working-hours record."""
 
     id: uuid.UUID
     nurse_id: uuid.UUID
     nurse: NurseResponse
     is_active: bool = Field(..., description="Whether this working slot is active")
+
+    class Config:
+        from_attributes = True
+
+
+class WorkingHoursListItemResponse(WorkingHoursBase):
+    """Response schema for each working-hours item in the list."""
+
+    id: uuid.UUID
+    nurse_id: uuid.UUID
+    is_active: bool = Field(..., description="Whether this working slot is active")
+
+    class Config:
+        from_attributes = True
+
+
+class NurseWorkingHoursResponse(BaseModel):
+    """Response schema for the nurse working-hours collection endpoint."""
+
+    nurse: NurseResponse
+    working_hours: list[WorkingHoursListItemResponse]
 
     class Config:
         from_attributes = True

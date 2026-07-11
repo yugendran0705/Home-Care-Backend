@@ -51,10 +51,10 @@ def create_working_hours_for_nurse(
         )
     except HTTPException as e:
         raise e
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred.",
         )
 
 

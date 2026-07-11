@@ -29,6 +29,7 @@ class BookingBase(BaseModel):
     total_amount: Decimal = Field(..., gt=0, decimal_places=2)
     booking_address_id: uuid.UUID
     notes: Optional[str] = None
+    parent_booking_id: Optional[uuid.UUID] = None
 
     @field_validator('scheduled_end_time')
     @classmethod
@@ -46,8 +47,12 @@ class BookingBase(BaseModel):
 class BookingCreate(BookingBase):
     """
     Schema used for creating a new booking.
+
+    booking_status and payment_status are intentionally not fields here: the
+    Booking model defaults both to 'Pending', and creation should never let a
+    caller set them directly.
     """
-    pass
+    is_parent_booking: bool = False
 
 
 class BookingUpdate(BaseModel):

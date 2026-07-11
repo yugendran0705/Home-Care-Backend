@@ -6,6 +6,7 @@ import uuid
 import models
 from repositories.bookings import BookingRepository
 from repositories.nursing_services import NursingServiceRepository
+from schemas.bookings import BookingCreate
 from utils.time_calculator import calculate_end_time, get_total_days
 
 class BookingService:
@@ -30,17 +31,16 @@ class BookingService:
         if not service:
             raise ValueError("Service not found.")
 
-        # Shared base data for all booking records
+        # Shared base data for all booking records.
+        # booking_status/payment_status are omitted so the Booking model's
+        # 'Pending' column defaults apply.
         base_booking_data = {
             "patient_id": patient_id,
             "nurse_id": nurse_id,
             "service_id": service_id,
-            "booking_status": "Pending",
             "total_amount": service.base_price,
-            "payment_status": "Pending",
             "booking_address_id": booking_address_id,
             "notes": notes,
-            "parent_booking_id": None # Default to None
         }
 
         # -------------------------------------------------------------------
@@ -54,7 +54,7 @@ class BookingService:
                 "scheduled_start_time": scheduled_start_time,
                 "scheduled_end_time": end_time
             }
-            return self.booking_repo.create(booking_in=booking_data)
+            return self.booking_repo.create(booking_in=BookingCreate(**booking_data))
 
         # -------------------------------------------------------------------
         # BRANCH 2: Daily Shifts (e.g., 8 hrs/day for 14 days)
@@ -72,7 +72,7 @@ class BookingService:
                 "scheduled_end_time": parent_end_time,
                 "is_parent_booking": True
             }
-            parent_booking = self.booking_repo.create(booking_in=parent_data)
+            parent_booking = self.booking_repo.create(booking_in=BookingCreate(**parent_data))
 
             # 2. Create the CHILD Bookings (The actual working shifts)
             total_days = get_total_days(service.duration, service.duration_type)

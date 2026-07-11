@@ -21,15 +21,29 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
-    op.execute("DROP INDEX IF EXISTS idx_addresses_location")
 
+    # Revision 889c029914b9 (this migration's down_revision) already adds
+    # addresses.location directly as geography(POINT,4326). Only perform the
+    # varchar -> geography conversion if the column is still text-typed, so
+    # this migration is a safe no-op when that's already the case.
     op.execute("""
-        ALTER TABLE addresses
-        ALTER COLUMN location TYPE geography(POINT,4326)
-        USING CASE
-            WHEN location IS NULL OR btrim(location) = '' THEN NULL
-            ELSE ST_GeogFromText(location)
-        END
+        DO $$
+        BEGIN
+            IF (
+                SELECT udt_name FROM information_schema.columns
+                WHERE table_name = 'addresses' AND column_name = 'location'
+            ) <> 'geography' THEN
+                EXECUTE 'DROP INDEX IF EXISTS idx_addresses_location';
+                EXECUTE $sql$
+                    ALTER TABLE addresses
+                    ALTER COLUMN location TYPE geography(POINT,4326)
+                    USING CASE
+                        WHEN location IS NULL OR btrim(location) = '' THEN NULL
+                        ELSE ST_GeogFromText(location)
+                    END
+                $sql$;
+            END IF;
+        END $$;
         """)
 
     op.create_index(
@@ -38,6 +52,7 @@ def upgrade() -> None:
         ["location"],
         unique=False,
         postgresql_using="gist",
+        if_not_exists=True,
     )
 
 

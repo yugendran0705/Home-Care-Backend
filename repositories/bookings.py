@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 import models
-from schemas.bookings import BookingCreate # Assumes you will create this schema
+from schemas.bookings import BookingCreate
 
 
 class BookingRepository:
@@ -33,7 +33,7 @@ class BookingRepository:
             models.Booking: The newly created Booking ORM object.
         """
         db_booking = models.Booking(**booking_in.model_dump())
-        
+
         self.db.add(db_booking)
         self.db.commit()
         self.db.refresh(db_booking)
@@ -44,6 +44,8 @@ class BookingRepository:
         db_bookings = [models.Booking(**data) for data in bookings_data]
         self.db.add_all(db_bookings)
         self.db.commit()
+        for db_booking in db_bookings:
+            self.db.refresh(db_booking)
         return db_bookings
 
     def get_by_id(self, *, booking_id: uuid.UUID) -> Optional[models.Booking]:

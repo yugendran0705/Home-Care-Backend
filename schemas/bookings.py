@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from .patients import PatientResponse
 from .nurses import NurseResponse
 from .nursing_services import NursingServiceResponse
-from .address import AddressResponse
+from .address import Address as AddressResponse
 # The following are placeholders; you would create these schemas as well
 from .reviews import ReviewResponse
 from .payments import PaymentResponse

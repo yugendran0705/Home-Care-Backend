@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
-from schemas.nurses import NurseResponse
+from schemas.nurses import NursePublicResponse
 class WorkingHoursBase(BaseModel):
     """Base schema for working-hours data.
     """
@@ -49,7 +49,7 @@ class WorkingHoursResponse(WorkingHoursBase):
 
     id: uuid.UUID
     nurse_id: uuid.UUID
-    nurse: NurseResponse
+    nurse: NursePublicResponse
     is_active: bool = Field(..., description="Whether this working slot is active")
 
     class Config:
@@ -70,7 +70,7 @@ class WorkingHoursListItemResponse(WorkingHoursBase):
 class NurseWorkingHoursResponse(BaseModel):
     """Response schema for the nurse working-hours collection endpoint."""
 
-    nurse: Optional[NurseResponse] = None
+    nurse: Optional[NursePublicResponse] = None
     working_hours: list[WorkingHoursListItemResponse]
 
     class Config:

@@ -8,7 +8,11 @@ from config.database import get_db
 from utils.roleChecker import RoleChecker
 from services.nurse_associated_services import NurseAssociatedServiceService
 import models
-from schemas.nurse_associated_services import NurseAssociatedServiceBulkCreate, NurseAssociatedServicesResponse
+from schemas.nurse_associated_services import (
+    NurseAssociatedServiceBulkCreate,
+    NurseAssociatedServicesResponse,
+    NursePublicAssociatedServicesResponse,
+)
 
 # Create API router
 router = APIRouter(
@@ -58,7 +62,7 @@ async def assign_service_to_nurse(
 
 @router.get(
     "/{nurse_id}/services",
-    response_model=NurseAssociatedServicesResponse,
+    response_model=NursePublicAssociatedServicesResponse,
     dependencies=[user_dependency],
     summary="Get all services offered by a nurse"
 )

@@ -162,6 +162,7 @@ class WorkingHoursRepository:
         query = self.db.query(models.WorkingHours).filter(
             models.WorkingHours.nurse_id == nurse_id,
             models.WorkingHours.day_of_week == day_of_week,
+            models.WorkingHours.is_active == True,
             models.WorkingHours.start_time < end_time,
             models.WorkingHours.end_time > start_time,
         )

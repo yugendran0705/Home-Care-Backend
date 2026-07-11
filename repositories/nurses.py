@@ -194,6 +194,8 @@ class NurseRepository:
         # --- SCHEDULE-TYPE FILTERS ---
 
         if service.schedule_type == 'Daily_Shift':
+            if not service.shift_duration_hours:
+                 raise ValueError("Daily_Shift services must have shift_duration_hours defined.")
             # The shift repeats at the same clock time each day.
             # Compute the daily time window from the first shift's start + shift_duration_hours.
             req_start_time_only = requested_start_time.time()
@@ -237,5 +239,6 @@ class NurseRepository:
             # No working-hours check for live-in/24-7 care, but the nurse must have
             # opted in for continuous assignments.
             query = query.filter(models.Nurse.continuous_care_available == True)
-
+        else:
+             raise ValueError(f"Unknown schedule_type: {service.schedule_type}")
         return query.all()

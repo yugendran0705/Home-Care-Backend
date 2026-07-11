@@ -31,6 +31,9 @@ class BookingService:
         if not service:
             raise ValueError("Service not found.")
 
+        if service.duration is None or not service.duration_type:
+            raise ValueError("Service is missing duration/duration_type configuration.")
+
         # Shared base data for all booking records.
         # booking_status/payment_status are omitted so the Booking model's
         # 'Pending' column defaults apply.
@@ -64,8 +67,14 @@ class BookingService:
                 raise ValueError("Daily_Shift services must have a shift_duration_hours defined.")
 
             # 1. Create the PARENT Booking (Acts as a wrapper for billing/UI)
-            parent_end_time = calculate_end_time(scheduled_start_time, service.duration, service.duration_type)
-            
+            # scheduled_end_time must match the last child shift's end time
+            # (start + (total_days - 1) days + shift_duration_hours), not a
+            # full calendar-day span, since each day only has
+            # shift_duration_hours of actual coverage.
+            total_days = get_total_days(service.duration, service.duration_type)
+            last_shift_start = scheduled_start_time + timedelta(days=total_days - 1)
+            parent_end_time = last_shift_start + timedelta(hours=service.shift_duration_hours)
+
             parent_data = {
                 **base_booking_data,
                 "scheduled_start_time": scheduled_start_time,
@@ -75,7 +84,6 @@ class BookingService:
             parent_booking = self.booking_repo.create(booking_in=BookingCreate(**parent_data))
 
             # 2. Create the CHILD Bookings (The actual working shifts)
-            total_days = get_total_days(service.duration, service.duration_type)
             child_bookings_data = []
 
             for day_offset in range(total_days):

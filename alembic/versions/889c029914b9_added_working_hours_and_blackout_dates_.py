@@ -26,6 +26,7 @@ def upgrade() -> None:
     op.add_column('addresses', sa.Column('location', geoalchemy2.types.Geography(geometry_type='POINT', srid=4326, dimension=2, from_text='ST_GeogFromText', name='geography'), nullable=True))
     op.create_index('idx_addresses_location', 'addresses', ['location'], unique=False, postgresql_using='gist',if_not_exists=True)
     op.add_column('bookings', sa.Column('parent_booking_id', sa.UUID(), nullable=True))
+    op.add_column('bookings', sa.Column('is_parent_booking', sa.Boolean(), nullable=False, server_default=sa.text('false')))
     op.create_table('working_hours',
         sa.Column('working_hours_id', sa.UUID(), nullable=False),
         sa.Column('nurse_id', sa.UUID(), sa.ForeignKey('nurses.nurse_id', ondelete='CASCADE'), nullable=False),
@@ -54,6 +55,7 @@ def downgrade() -> None:
     op.drop_table('blackout_dates')
     op.drop_table('working_hours')
     op.drop_constraint(None, 'bookings', type_='foreignkey')
+    op.drop_column('bookings', 'is_parent_booking')
     op.drop_column('bookings', 'parent_booking_id')
     op.drop_index('idx_addresses_location', table_name='addresses', postgresql_using='gist')
     op.drop_column('addresses', 'location')

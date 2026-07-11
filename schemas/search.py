@@ -32,4 +32,4 @@ class NurseSearchResponse(BaseModel):
     distance_meters: Optional[float] 
 
     class Config:
-        orm_mode = True
+        from_attributes = True

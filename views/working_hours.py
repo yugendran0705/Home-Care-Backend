@@ -78,7 +78,7 @@ def bulk_create_working_hours_for_nurse(
             working_hours_data=working_hours_data,
         )
         return NurseWorkingHoursResponse(
-            nurse=current_user,
+            nurse=current_user.nurse,
             working_hours=created_working_hours,
         )
     except HTTPException as e:

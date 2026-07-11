@@ -70,7 +70,7 @@ class WorkingHoursListItemResponse(WorkingHoursBase):
 class NurseWorkingHoursResponse(BaseModel):
     """Response schema for the nurse working-hours collection endpoint."""
 
-    nurse: NurseResponse
+    nurse: Optional[NurseResponse] = None
     working_hours: list[WorkingHoursListItemResponse]
 
     class Config:

@@ -3,13 +3,13 @@
 import uuid
 from typing import List, Optional, Dict, Any
 
+from datetime import datetime, timedelta
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select
 
 # Adjust the import path based on your project structure
 import models
-from schemas.nurses import NurseCreate # Assumes you will create this schema
-
 
 class NurseRepository:
     """
@@ -124,3 +124,121 @@ class NurseRepository:
         self.db.delete(db_nurse)
         self.db.commit()
         return db_nurse
+
+    def search_available_nurses(
+        self,
+        service_id: uuid.UUID,
+        patient_lat: float,
+        patient_lon: float,
+        requested_start_time: datetime,
+        requested_end_time: datetime,
+        search_radius_meters: int = 8000
+    ) -> List[models.Nurse]:
+        """
+        Finds available nurses for a given service, location, and time window.
+
+        For Daily_Shift services:
+            requested_start_time = start of the first shift
+            requested_end_time   = end of the last shift (full booking period end)
+        For Continuous services:
+            requested_start_time = booking start
+            requested_end_time   = booking end
+        """
+
+        # Fix 1: query the service directly — NurseRepository has no service_repo
+        service = self.db.get(models.NursingService, service_id)
+        if not service:
+            raise ValueError("Service not found.")
+
+        travel_buffer = timedelta(minutes=30)
+        buffered_start = requested_start_time - travel_buffer
+        buffered_end = requested_end_time + travel_buffer
+
+        target_point = func.ST_SetSRID(func.ST_MakePoint(patient_lon, patient_lat), 4326)
+
+        # --- EXCLUSION SUBQUERIES ---
+
+        overlapping_blackouts = self.db.query(models.BlackoutDate.nurse_id).filter(
+            models.BlackoutDate.start_datetime < requested_end_time,
+            models.BlackoutDate.end_datetime > requested_start_time
+        ).subquery()
+
+        # Only child bookings carry real time slots; parent bookings are billing wrappers
+        overlapping_bookings = self.db.query(models.Booking.nurse_id).filter(
+            models.Booking.booking_status == 'Confirmed',
+            models.Booking.payment_status == 'Paid',
+            models.Booking.is_parent_booking == False,
+            models.Booking.scheduled_start_time < buffered_end,
+            models.Booking.scheduled_end_time > buffered_start
+        ).subquery()
+
+        # --- BASE QUERY ---
+        # Fix 2: NurseService → NurseAssociatedService (correct model name)
+        # Fix 3: Nurse has no address_id; location lives on Address linked via User
+        query = self.db.query(models.Nurse).join(
+            models.NurseAssociatedService,
+            models.Nurse.id == models.NurseAssociatedService.nurse_id
+        ).join(
+            models.User, models.Nurse.id == models.User.id
+        ).join(
+            models.Address, models.User.id == models.Address.user_id
+        ).filter(
+            models.Address.is_primary == True,
+            models.NurseAssociatedService.service_id == service_id,
+            func.ST_DWithin(models.Address.location, target_point, search_radius_meters),
+            models.Nurse.is_verified == True,
+            ~models.Nurse.id.in_(overlapping_blackouts),
+            ~models.Nurse.id.in_(overlapping_bookings)
+        )
+
+        # --- SCHEDULE-TYPE FILTERS ---
+
+        if service.schedule_type == 'Daily_Shift':
+            if not service.shift_duration_hours:
+                 raise ValueError("Daily_Shift services must have shift_duration_hours defined.")
+            # The shift repeats at the same clock time each day.
+            # Compute the daily time window from the first shift's start + shift_duration_hours.
+            req_start_time_only = requested_start_time.time()
+            shift_end = requested_start_time + timedelta(hours=service.shift_duration_hours)
+            req_end_time_only = shift_end.time()
+
+            # Fix 4: collect ALL distinct weekdays across the full booking date range.
+            # A nurse working Mon–Fri must be excluded from a 14-day booking that includes weekends.
+            start_date = requested_start_time.date()
+            end_date = requested_end_time.date()
+            total_days = (end_date - start_date).days + 1
+            required_weekdays = list({
+                (start_date + timedelta(days=i)).weekday()
+                for i in range(total_days)
+            })
+
+            # Count how many of the required weekdays each nurse actually covers.
+            # A nurse is eligible only when that count equals the number of required weekdays.
+            covered_days_subq = (
+                self.db.query(
+                    models.WorkingHours.nurse_id,
+                    func.count(func.distinct(models.WorkingHours.day_of_week)).label('covered')
+                )
+                .filter(
+                    models.WorkingHours.is_active == True,
+                    models.WorkingHours.day_of_week.in_(required_weekdays),
+                    models.WorkingHours.start_time <= req_start_time_only,
+                    models.WorkingHours.end_time >= req_end_time_only
+                )
+                .group_by(models.WorkingHours.nurse_id)
+                .subquery()
+            )
+
+            query = query.join(
+                covered_days_subq, models.Nurse.id == covered_days_subq.c.nurse_id
+            ).filter(
+                covered_days_subq.c.covered >= len(required_weekdays)
+            )
+
+        elif service.schedule_type == 'Continuous':
+            # No working-hours check for live-in/24-7 care, but the nurse must have
+            # opted in for continuous assignments.
+            query = query.filter(models.Nurse.continuous_care_available == True)
+        else:
+             raise ValueError(f"Unknown schedule_type: {service.schedule_type}")
+        return query.all()

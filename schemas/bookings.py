@@ -5,13 +5,13 @@ from datetime import datetime
 from typing import Optional
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 # Import other schemas for nesting in the response
 from .patients import PatientResponse
 from .nurses import NurseResponse
 from .nursing_services import NursingServiceResponse
-from .address import AddressResponse
+from .address import Address as AddressResponse
 # The following are placeholders; you would create these schemas as well
 from .reviews import ReviewResponse
 from .payments import PaymentResponse
@@ -29,10 +29,17 @@ class BookingBase(BaseModel):
     total_amount: Decimal = Field(..., gt=0, decimal_places=2)
     booking_address_id: uuid.UUID
     notes: Optional[str] = None
+    parent_booking_id: Optional[uuid.UUID] = None
 
-    @validator('scheduled_end_time')
-    def end_time_must_be_after_start_time(cls, v, values):
-        if 'scheduled_start_time' in values and v <= values['scheduled_start_time']:
+    @field_validator('scheduled_end_time')
+    @classmethod
+    def end_time_must_be_after_start_time(
+        cls,
+        v: datetime,
+        info: ValidationInfo
+    ) -> datetime:
+        start_time = info.data.get('scheduled_start_time')
+        if start_time and v <= start_time:
             raise ValueError('Scheduled end time must be after start time')
         return v
 
@@ -40,8 +47,12 @@ class BookingBase(BaseModel):
 class BookingCreate(BookingBase):
     """
     Schema used for creating a new booking.
+
+    booking_status and payment_status are intentionally not fields here: the
+    Booking model defaults both to 'Pending', and creation should never let a
+    caller set them directly.
     """
-    pass
+    is_parent_booking: bool = False
 
 
 class BookingUpdate(BaseModel):

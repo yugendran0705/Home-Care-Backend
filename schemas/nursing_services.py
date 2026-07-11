@@ -32,9 +32,11 @@ class NursingServiceBase(BaseModel):
     is_qualified: Optional[bool] = Field(
         False, description="Indicates if the nurse should be qualified to provide the service."
     )
-    is_continuous: Optional[bool] = Field(
-        None,
-        description="Indicates if the service has to be performed continuously (Ex: daily)",
+    schedule_type: str = Field(
+        ...,
+        max_length=20,
+        description="How the service is scheduled.",
+        examples=["Continuous", "Daily_Shift"],
     )
     shift_duration_hours: Optional[int] = Field(
         None,
@@ -67,9 +69,11 @@ class NursingServiceUpdate(BaseModel):
     )
     is_active: Optional[bool] = None
     is_qualified: Optional[bool] = None
-    is_continuous: Optional[bool] = Field(
+    schedule_type: Optional[str] = Field(
         None,
-        description="Indicates if the service has to be performed continuously (Ex: daily)",
+        max_length=20,
+        description="How the service is scheduled.",
+        examples=["Continuous", "Daily_Shift"],
     )
     shift_duration_hours: Optional[int] = Field(None,
         description="Time at which the service will be performed continuously"

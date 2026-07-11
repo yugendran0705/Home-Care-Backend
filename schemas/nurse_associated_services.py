@@ -6,7 +6,7 @@ from typing import List
 from pydantic import BaseModel, Field
 
 # Import other schemas for nesting in responses
-from .nurses import NurseResponse
+from .nurses import NurseResponse, NursePublicResponse
 from .nursing_services import NursingServiceResponse
 
 
@@ -31,6 +31,18 @@ class NurseAssociatedServicesResponse(BaseModel):
     Nested response schema containing nurse profile and service list.
     """
     nurse: NurseResponse
+    services: List[NursingServiceResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class NursePublicAssociatedServicesResponse(BaseModel):
+    """
+    Public-safe variant of NurseAssociatedServicesResponse, used where the
+    viewer (e.g. a Patient) is not authorized to see account/contact PII.
+    """
+    nurse: NursePublicResponse
     services: List[NursingServiceResponse]
 
     class Config:

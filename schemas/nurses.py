@@ -86,6 +86,20 @@ class NurseResponse(NurseBase):
         
    
 
+class NursePublicResponse(NurseBase):
+    """
+    Public-safe schema for a nurse's profile, used where the viewer may not
+    be authorized to see account/contact PII (e.g. email, home address).
+    Excludes the nested `user` object that `NurseResponse` carries.
+    """
+    id: uuid.UUID
+    is_verified: bool
+    average_rating: Decimal
+
+    class Config:
+        from_attributes = True
+
+
 class NurseCreateResponse(BaseModel):
     access_token: str
     refresh_token: str

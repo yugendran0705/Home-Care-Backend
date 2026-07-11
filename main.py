@@ -3,16 +3,7 @@ from dotenv import load_dotenv
 import models as model
 from config.database import engine
 
-from views import (
-    nurse_associated_services,
-    patients,
-    users,
-    address,
-    nurses,
-    nursing_services,
-    working_hours,
-    blackout_dates,
-)
+from views import nurse_associated_services, patients, users, address, nurses, nursing_services, payments, working_hours, blackout_dates
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -48,7 +39,7 @@ app.include_router(nursing_services.router, prefix="/api/v1")
 app.include_router(nurse_associated_services.router, prefix="/api/v1")
 app.include_router(working_hours.router, prefix="/api/v1")
 app.include_router(blackout_dates.router, prefix="/api/v1")
-
+app.include_router(payments.router, prefix="/api/v1")
 
 @app.get("/")
 async def read_root():

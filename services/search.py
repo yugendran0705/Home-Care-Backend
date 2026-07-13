@@ -52,13 +52,13 @@ class SearchService:
             )
         elif service.schedule_type == "Continuous":
             requested_end_time = calculate_end_time(
-            requested_start_time, service.duration, service.duration_type
+                requested_start_time, service.duration, service.duration_type
             )
         else:
-             raise HTTPException(
-                 status_code=status.HTTP_400_BAD_REQUEST,
-                 detail=f"Unknown schedule_type: {service.schedule_type}",
-             )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown schedule_type: {service.schedule_type}",
+            )
 
         nurses = self.nurse_repo.search_available_nurses(
             service_id=search_request.service_id,

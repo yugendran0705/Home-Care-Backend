@@ -28,18 +28,24 @@ class SearchService:
             )
 
         requested_start_time = search_request.requested_start_time
-        if service.duration is None or not service.duration_type:
+        duration_type = (service.duration_type or "").lower()
+        if service.duration is None or not duration_type:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Service is missing duration/duration_type configuration.",
             )
         if service.schedule_type == "Daily_Shift":
+            if duration_type not in {"day", "days", "week", "weeks"}:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Daily_Shift duration_type must be days/weeks, got: {service.duration_type}",
+                )
             if not service.shift_duration_hours:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Daily_Shift services must have shift_duration_hours defined.",
                 )
-            total_days = get_total_days(service.duration, service.duration_type)
+            total_days = get_total_days(service.duration, duration_type)
             last_shift_start = requested_start_time + timedelta(days=total_days - 1)
             requested_end_time = last_shift_start + timedelta(
                 hours=service.shift_duration_hours

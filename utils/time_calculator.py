@@ -6,7 +6,8 @@ def calculate_end_time(start_time: datetime, duration: int, duration_type: str) 
     Calculates the scheduled end time based on duration and type.
     """
     duration_type = duration_type.lower()
-    
+    if duration_type in {"minute", "minutes"}:
+        return start_time + timedelta(minutes=duration)
     if duration_type in ['hour', 'hours']:
         return start_time + timedelta(hours=duration)
     elif duration_type in ['day', 'days']:

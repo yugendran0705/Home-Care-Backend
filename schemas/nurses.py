@@ -27,7 +27,7 @@ class NurseBase(BaseModel):
     years_of_experience: int = Field(..., ge=0, examples=[5])
     bio: Optional[str] = Field(None, examples=["Experienced pediatric nurse."])
     profile_picture_url: str = Field(..., examples=["https://example.com/profile.jpg"])
-    continuous_care_available: bool = Field(False,description="Indicates whether the nurse is available for continuous services")
+    continuous_care_available: bool = Field(False, description="Indicates whether the nurse is available for continuous services")
 
 class NurseServiceRegistrationItem(BaseModel):
     """Represents a group of service IDs to register for a nurse."""

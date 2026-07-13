@@ -7,8 +7,6 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, func, and_, or_
 from datetime import datetime, timedelta, time
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session, joinedload
 
 # Adjust the import path based on your project structure
 import models
@@ -209,7 +207,7 @@ class NurseRepository:
                 return t.replace(tzinfo=dt.tzinfo) if dt.tzinfo else t
 
             def _time_max(dt: datetime):
-                t = time.max
+                t = time(23, 59, 59)
                 return t.replace(tzinfo=dt.tzinfo) if dt.tzinfo else t
 
             def _split_shift_into_daily_segments(
@@ -253,7 +251,8 @@ class NurseRepository:
                 shift_end = shift_start + timedelta(hours=service.shift_duration_hours)
                 shift_windows.append((shift_start, shift_end))
                 current_date += timedelta(days=1)
-
+            if not shift_windows:
+                return []
             blackout_filters = [
                 and_(
                     models.BlackoutDate.start_datetime < shift_end,

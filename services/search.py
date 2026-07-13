@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from repositories.nurses import NurseRepository
 from repositories.nursing_services import NursingServiceRepository
 from schemas.search import NurseSearchRequest, NurseSearchResponse
+from utils.time_calculator import calculate_end_time, get_total_days
 
 
 class SearchService:
@@ -27,26 +28,31 @@ class SearchService:
             )
 
         requested_start_time = search_request.requested_start_time
-        requested_end_time = requested_start_time
-
-        if service.duration_type and service.duration is not None:
-            duration_type = str(service.duration_type).lower()
-            if duration_type == "minutes":
-                requested_end_time = requested_start_time + timedelta(
-                    minutes=service.duration
+        if service.duration is None or not service.duration_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Service is missing duration/duration_type configuration.",
+            )
+        if service.schedule_type == "Daily_Shift":
+            if not service.shift_duration_hours:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Daily_Shift services must have shift_duration_hours defined.",
                 )
-            elif duration_type == "hours":
-                requested_end_time = requested_start_time + timedelta(
-                    hours=service.duration
-                )
-            elif duration_type == "days":
-                requested_end_time = requested_start_time + timedelta(
-                    days=service.duration
-                )
-        elif service.schedule_type == "Daily_Shift" and service.shift_duration_hours:
-            requested_end_time = requested_start_time + timedelta(
+            total_days = get_total_days(service.duration, service.duration_type)
+            last_shift_start = requested_start_time + timedelta(days=total_days - 1)
+            requested_end_time = last_shift_start + timedelta(
                 hours=service.shift_duration_hours
             )
+        elif service.schedule_type == "Continuous":
+            requested_end_time = calculate_end_time(
+            requested_start_time, service.duration, service.duration_type
+            )
+        else:
+             raise HTTPException(
+                 status_code=status.HTTP_400_BAD_REQUEST,
+                 detail=f"Unknown schedule_type: {service.schedule_type}",
+             )
 
         nurses = self.nurse_repo.search_available_nurses(
             service_id=search_request.service_id,

@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, func, and_, or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -196,16 +196,57 @@ class NurseRepository:
 
         if service.schedule_type == "Daily_Shift":
             if not service.shift_duration_hours:
-                 raise ValueError("Daily_Shift services must have shift_duration_hours defined.")
+                raise ValueError(
+                    "Daily_Shift services must have shift_duration_hours defined."
+                )
             start_date = requested_start_time.date()
-            end_date = requested_end_time.date()
-            shift_windows = []
-            current_date = start_date
 
             def _time_only(dt: datetime):
                 return dt.timetz() if dt.tzinfo else dt.time()
 
-            while current_date <= end_date:
+            def _time_min(dt: datetime):
+                t = time.min
+                return t.replace(tzinfo=dt.tzinfo) if dt.tzinfo else t
+
+            def _time_max(dt: datetime):
+                t = time.max
+                return t.replace(tzinfo=dt.tzinfo) if dt.tzinfo else t
+
+            def _split_shift_into_daily_segments(
+                shift_start: datetime, shift_end: datetime
+            ):
+                segments = []
+                current = shift_start
+                while current < shift_end:
+                    next_day_start = datetime.combine(
+                        current.date() + timedelta(days=1),
+                        _time_min(current),
+                    )
+                    segment_end = min(shift_end, next_day_start)
+                    segment_end_time = (
+                        _time_max(current)
+                        if segment_end == next_day_start
+                        else _time_only(segment_end)
+                    )
+                    segments.append(
+                        (
+                            current.weekday(),
+                            _time_only(current),
+                            segment_end_time,
+                        )
+                    )
+                    current = segment_end
+                return segments
+
+            shift_windows = []
+            current_date = start_date
+
+            last_shift_start = requested_end_time - timedelta(
+                hours=service.shift_duration_hours
+            )
+            last_shift_start_date = last_shift_start.date()
+
+            while current_date <= last_shift_start_date:
                 shift_start = datetime.combine(
                     current_date, _time_only(requested_start_time)
                 )
@@ -251,49 +292,27 @@ class NurseRepository:
                 ~models.Nurse.id.in_(select(overlapping_bookings.c.nurse_id)),
             )
 
-            # The shift repeats at the same clock time each day.
-            # Compute the daily time window from the first shift's start + shift_duration_hours.
-            req_start_time_only = (
-                requested_start_time.timetz()
-                if requested_start_time.tzinfo
-                else requested_start_time.time()
-            )
-            shift_end = requested_start_time + timedelta(
-                hours=service.shift_duration_hours
-            )
-            req_end_time_only = (
-                shift_end.timetz() if shift_end.tzinfo else shift_end.time()
-            )
-
-            # Fix 4: collect ALL distinct weekdays across the full booking date range.
-            # A nurse working Mon–Fri must be excluded from a 14-day booking that includes weekends.
-            total_days = (end_date - start_date).days + 1
-            required_weekdays = list(
-                {(start_date + timedelta(days=i)).weekday() for i in range(total_days)}
-            )
-
-            # Count how many of the required weekdays each nurse actually covers.
-            # A nurse is eligible only when that count equals the number of required weekdays.
-            covered_days_subq = (
-                self.db.query(
-                    models.WorkingHours.nurse_id,
-                    func.count(func.distinct(models.WorkingHours.day_of_week)).label(
-                        "covered"
-                    ),
+            required_segments = []
+            for shift_start, shift_end in shift_windows:
+                required_segments.extend(
+                    _split_shift_into_daily_segments(shift_start, shift_end)
                 )
+            required_segments = sorted(set(required_segments))
+
+            segment_requirements = [
+                self.db.query(models.WorkingHours)
                 .filter(
+                    models.WorkingHours.nurse_id == models.Nurse.id,
                     models.WorkingHours.is_active == True,
-                    models.WorkingHours.day_of_week.in_(required_weekdays),
-                    models.WorkingHours.start_time <= req_start_time_only,
-                    models.WorkingHours.end_time >= req_end_time_only,
+                    models.WorkingHours.day_of_week == weekday,
+                    models.WorkingHours.start_time <= seg_start,
+                    models.WorkingHours.end_time >= seg_end,
                 )
-                .group_by(models.WorkingHours.nurse_id)
-                .subquery()
-            )
+                .exists()
+                for weekday, seg_start, seg_end in required_segments
+            ]
 
-            query = query.join(
-                covered_days_subq, models.Nurse.id == covered_days_subq.c.nurse_id
-            ).filter(covered_days_subq.c.covered >= len(required_weekdays))
+            query = query.filter(*segment_requirements)
 
         elif service.schedule_type == "Continuous":
             buffered_start = requested_start_time - travel_buffer
@@ -328,5 +347,7 @@ class NurseRepository:
                 ~models.Nurse.id.in_(select(overlapping_blackouts.c.nurse_id)),
                 ~models.Nurse.id.in_(select(overlapping_bookings.c.nurse_id)),
             )
+        else:
+            raise ValueError(f"Unknown schedule_type: {service.schedule_type}")
 
         return query.all()

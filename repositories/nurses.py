@@ -187,6 +187,7 @@ class NurseRepository:
                     models.Address.location, target_point, search_radius_meters
                 ),
                 models.Nurse.is_verified == True,
+                models.Nurse.is_active == True,
             )
         )
 

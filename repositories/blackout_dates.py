@@ -1,10 +1,11 @@
 # /repositories/blackout_dates.py
 
 import uuid
-from typing import Optional, List, Dict, Any
+from datetime import datetime
+from typing import Optional, List, Dict, Any, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 
 import models
 
@@ -98,3 +99,29 @@ class BlackoutDateRepository:
             statement = statement.where(models.BlackoutDate.id != exclude_blackout_id)
 
         return self.db.execute(statement).scalars().all()
+
+    def has_overlap(
+        self, *, nurse_id: uuid.UUID, windows: List[Tuple[datetime, datetime]]
+    ) -> bool:
+        """
+        True if the nurse has ANY blackout overlapping ANY of the given
+        (start, end) windows - one and_() condition per window, OR'd together,
+        same style as BookingRepository.find_conflicting.
+        """
+        if not windows:
+            return False
+
+        window_filters = [
+            and_(
+                models.BlackoutDate.start_datetime < end,
+                models.BlackoutDate.end_datetime > start,
+            )
+            for start, end in windows
+        ]
+
+        conflict = (
+            self.db.query(models.BlackoutDate.id)
+            .filter(models.BlackoutDate.nurse_id == nurse_id, or_(*window_filters))
+            .first()
+        )
+        return conflict is not None

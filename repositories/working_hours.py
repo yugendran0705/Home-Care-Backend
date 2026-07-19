@@ -1,6 +1,6 @@
 import uuid
 from datetime import time
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -171,4 +171,38 @@ class WorkingHoursRepository:
             query = query.filter(models.WorkingHours.id != exclude_working_hours_id)
 
         return query.first()
+
+    def is_shift_covered(
+        self, *, nurse_id: uuid.UUID, segments: List[Tuple[int, time, time]]
+    ) -> bool:
+        """
+        True if EVERY (weekday, seg_start, seg_end) segment is covered by an
+        active working-hours slot for this nurse. Same EXISTS-per-segment
+        pattern as NurseRepository.search_available_nurses's segment_requirements
+        (one correlated EXISTS clause per required segment, all passed as
+        separate .filter() args so SQLAlchemy ANDs them together) - here
+        anchored on a known nurse_id instead of an outer Nurse join.
+        """
+        if not segments:
+            return True
+
+        segment_requirements = [
+            self.db.query(models.WorkingHours.id)
+            .filter(
+                models.WorkingHours.nurse_id == nurse_id,
+                models.WorkingHours.is_active == True,
+                models.WorkingHours.day_of_week == weekday,
+                models.WorkingHours.start_time <= seg_start,
+                models.WorkingHours.end_time >= seg_end,
+            )
+            .exists()
+            for weekday, seg_start, seg_end in segments
+        ]
+
+        return (
+            self.db.query(models.Nurse.id)
+            .filter(models.Nurse.id == nurse_id, *segment_requirements)
+            .first()
+            is not None
+        )
 

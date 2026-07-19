@@ -1,11 +1,11 @@
 # /repositories/bookings.py
 
 import uuid
-from datetime import datetime
-from typing import List, Optional, Dict, Any
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Any, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, and_, or_
 
 import models
 from schemas.bookings import BookingCreate
@@ -138,7 +138,99 @@ class BookingRepository:
         db_booking = self.get_by_id(booking_id=booking_id)
         if not db_booking:
             return None
-            
+
         self.db.delete(db_booking)
         self.db.commit()
         return db_booking
+
+    # ------------------------------------------------------------------
+    # No-commit helpers for use inside a service-owned transaction (the
+    # pending-booking create flow and the confirm/cancel flows need Booking +
+    # Payment writes to commit together atomically, so these do NOT commit —
+    # the service calls db.commit()/db.rollback() once, after all writes).
+    # ------------------------------------------------------------------
+
+    def add(self, booking: models.Booking) -> models.Booking:
+        """Adds a Booking to the session and flushes so booking.id is populated
+        immediately (needed for child rows' parent_booking_id FK)."""
+        self.db.add(booking)
+        self.db.flush()
+        return booking
+
+    def add_all(self, bookings: List[models.Booking]) -> List[models.Booking]:
+        """Adds multiple Bookings and flushes. No commit."""
+        self.db.add_all(bookings)
+        self.db.flush()
+        return bookings
+
+    def find_conflicting(
+        self,
+        *,
+        nurse_id: uuid.UUID,
+        windows: List[Tuple[datetime, datetime]],
+        pending_active_since: datetime,
+        travel_buffer: timedelta,
+    ) -> bool:
+        """
+        True if the nurse has a Confirmed booking, or an active (not-yet-expired)
+        Pending booking, overlapping any of the given (start, end) windows.
+        Only child/standalone rows carry real time slots; parent bookings are
+        billing wrappers and are excluded.
+        """
+        status_filter = or_(
+            models.Booking.booking_status == "Confirmed",
+            and_(
+                models.Booking.booking_status == "Pending",
+                models.Booking.booking_time >= pending_active_since,
+            ),
+        )
+        overlap_filters = [
+            and_(
+                models.Booking.scheduled_start_time < end + travel_buffer,
+                models.Booking.scheduled_end_time > start - travel_buffer,
+            )
+            for start, end in windows
+        ]
+        conflict = (
+            self.db.query(models.Booking.id)
+            .filter(
+                models.Booking.nurse_id == nurse_id,
+                models.Booking.is_parent_booking == False,  # noqa: E712
+                status_filter,
+                or_(*overlap_filters),
+            )
+            .first()
+        )
+        return conflict is not None
+
+    def get_for_update(self, *, booking_id: uuid.UUID) -> Optional[models.Booking]:
+        """Row-locks the booking (SELECT ... FOR UPDATE) for atomic status transitions."""
+        return (
+            self.db.query(models.Booking)
+            .filter(models.Booking.id == booking_id)
+            .with_for_update()
+            .one_or_none()
+        )
+
+    def set_status(
+        self, *, booking: models.Booking, booking_status: str, payment_status: str
+    ) -> models.Booking:
+        """Mutates status fields on an already-loaded (and typically row-locked)
+        booking. No commit — caller controls the transaction boundary."""
+        booking.booking_status = booking_status
+        booking.payment_status = payment_status
+        return booking
+
+    def cascade_children_status(
+        self, *, parent_booking_id: uuid.UUID, booking_status: str, payment_status: str
+    ) -> None:
+        """Bulk-updates all child shifts of a Daily_Shift parent. No commit."""
+        self.db.query(models.Booking).filter(
+            models.Booking.parent_booking_id == parent_booking_id
+        ).update(
+            {
+                models.Booking.booking_status: booking_status,
+                models.Booking.payment_status: payment_status,
+            },
+            synchronize_session=False,
+        )

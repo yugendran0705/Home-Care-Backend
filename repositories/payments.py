@@ -70,6 +70,33 @@ class PaymentRepository:
         statement = select(models.Payment).where(models.Payment.booking_id == booking_id)
         return self.db.execute(statement).scalar_one_or_none()
 
+    # ------------------------------------------------------------------
+    # No-commit helpers for use inside a service-owned transaction (booking +
+    # payment must commit together atomically) — see repositories/bookings.py.
+    # ------------------------------------------------------------------
+
+    def add(self, payment: models.Payment) -> models.Payment:
+        """Adds a Payment to the session and flushes. No commit."""
+        self.db.add(payment)
+        self.db.flush()
+        return payment
+
+    def set_status(
+        self,
+        *,
+        payment: models.Payment,
+        payment_status: str,
+        transaction_id: Optional[str] = None,
+        payment_method: Optional[str] = None,
+    ) -> models.Payment:
+        """Mutates status/transaction fields on an already-loaded payment. No commit."""
+        payment.payment_status = payment_status
+        if transaction_id:
+            payment.transaction_id = transaction_id
+        if payment_method:
+            payment.payment_method = payment_method
+        return payment
+
     def get_by_patient_id(self, *, patient_id: uuid.UUID) -> List[models.Payment]:
         """
         Retrieves all payments made by a specific patient.

@@ -44,7 +44,7 @@ class BookingService:
     # ------------------------------------------------------------------
     def _assert_nurse_available(self, nurse_id: uuid.UUID, service, windows) -> None:
         nurse = self.db.get(models.Nurse, nurse_id)
-        if not nurse or not nurse.is_verified:
+        if not nurse or not nurse.is_verified or not nurse.is_active:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Nurse is not available for booking.",

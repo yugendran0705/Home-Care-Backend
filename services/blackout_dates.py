@@ -38,7 +38,14 @@ class BlackoutDateService:
             models.BlackoutDate: Newly created blackout date.
         """
 
-        now = datetime.now()
+        start_tz = blackout_data.start_datetime.tzinfo
+        end_tz = blackout_data.end_datetime.tzinfo
+        if (start_tz is None) != (end_tz is None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start and end datetime must either both include timezone information or both be naive.",
+            )
+        now = datetime.now(tz=start_tz) if start_tz else datetime.now()
 
         # Validate future dates
         if blackout_data.start_datetime < now:
@@ -182,7 +189,14 @@ class BlackoutDateService:
                 detail="End datetime cannot be null.",
             )
 
-        now = datetime.now()
+        start_tz = start_datetime.tzinfo
+        end_tz = end_datetime.tzinfo
+        if (start_tz is None) != (end_tz is None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start and end datetime must either both include timezone information or both be naive.",
+            )
+        now = datetime.now(tz=start_tz) if start_tz else datetime.now()
 
         # Validate future dates
         if start_datetime < now:

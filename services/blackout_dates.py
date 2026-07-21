@@ -9,6 +9,7 @@ from repositories.blackout_dates import BlackoutDateRepository
 from schemas.blackout_dates import BlackoutDateCreate, BlackoutDateUpdate
 
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,21 @@ class BlackoutDateService:
         Returns:
             models.BlackoutDate: Newly created blackout date.
         """
+
+        now = datetime.now()
+
+        # Validate future dates
+        if blackout_data.start_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start datetime must be valid, not in the past.",
+            )
+
+        if blackout_data.end_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="End datetime must be valid, not in the past.",
+            )
 
         # Validate date range
         if blackout_data.start_datetime >= blackout_data.end_datetime:
@@ -164,6 +180,21 @@ class BlackoutDateService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="End datetime cannot be null.",
+            )
+
+        now = datetime.now()
+
+        # Validate future dates
+        if start_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start datetime must be valid, not in the past.",
+            )
+
+        if end_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="End datetime must be valid, not in the past.",
             )
 
         if start_datetime >= end_datetime:

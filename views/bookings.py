@@ -43,6 +43,7 @@ def get_booking_service(db: Session = Depends(get_db)) -> BookingService:
 )
 def search_available_nurses(
     search_request: NurseSearchRequest,
+    current_user: models.User = patient_dependency,
     search_service: SearchService = Depends(get_search_service),
 ):
     """
@@ -65,7 +66,7 @@ def search_available_nurses(
     status_code=status.HTTP_201_CREATED,
     summary="Create a pending booking + pending payment for a nurse",
 )
-def create_pending_booking(
+def create_booking(
     booking_request: PendingBookingRequest,
     current_user: models.User = patient_dependency,
     booking_service: BookingService = Depends(get_booking_service),
@@ -73,11 +74,11 @@ def create_pending_booking(
     """
     Creates a Pending booking and its Pending Payment, holding the nurse's
     slot for a limited window until payment is confirmed. See
-    BookingService.create_pending_booking for the Redis-lock + transaction
+    BookingService.create_booking for the Redis-lock + transaction
     concurrency design.
     """
     try:
-        return booking_service.create_pending_booking(
+        return booking_service.create_booking(
             patient_id=current_user.id,
             nurse_id=booking_request.nurse_id,
             service_id=booking_request.service_id,

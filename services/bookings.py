@@ -89,7 +89,7 @@ class BookingService:
     # ------------------------------------------------------------------
     # Create pending booking + pending payment (atomic, lock-guarded)
     # ------------------------------------------------------------------
-    def create_pending_booking(
+    def create_booking(
         self,
         patient_id: uuid.UUID,
         nurse_id: uuid.UUID,
@@ -273,13 +273,24 @@ class BookingService:
     # Payment failed / 10-min timeout -> cancel booking (atomic, row-locked)
     # ------------------------------------------------------------------
     def fail_booking(self, booking_id: uuid.UUID, transaction_id: str = None) -> models.Booking:
-        """Payment gateway reported failure -> cancel the (still-Pending) booking."""
-        return self._cancel_if_pending(booking_id, transaction_id=transaction_id)
+        """
+        Payment gateway reported failure -> cancel the (still-Pending) booking.
+        Raises 409 if the booking was already Confirmed: that means payment
+        actually succeeded before this failure callback arrived, a genuine
+        conflict between signals that must be surfaced (and reconciled -
+        void/refund) rather than silently returning 200 with the booking
+        untouched.
+        """
+        return self._cancel_if_pending(
+            booking_id, transaction_id=transaction_id, raise_if_already_confirmed=True
+        )
 
     def cancel_if_still_pending(self, booking_id: uuid.UUID):
         """
-        Called by the expiry sweeper when the ZSET timer fires. No-op if the
-        booking was already Confirmed or Cancelled (the webhook already acted).
+        Called by the expiry sweeper when the ZSET timer fires. Finding the
+        booking already Confirmed here is the EXPECTED outcome of the
+        webhook-vs-timer race (the webhook won) - a silent no-op, not an error.
+        Already-Cancelled is likewise a harmless idempotent no-op.
         """
         return self._cancel_if_pending(booking_id, silent_if_missing=True)
 
@@ -288,6 +299,7 @@ class BookingService:
         booking_id: uuid.UUID,
         transaction_id: str = None,
         silent_if_missing: bool = False,
+        raise_if_already_confirmed: bool = False,
     ):
         try:
             try:
@@ -298,7 +310,20 @@ class BookingService:
                     return None
                 raise
 
-            # Idempotent: already Confirmed or Cancelled -> leave it alone.
+            if booking.booking_status == "Confirmed":
+                self.db.rollback()
+                if raise_if_already_confirmed:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=(
+                            "Booking is already Confirmed/Paid; a payment-failed "
+                            "callback arrived after success was already processed. "
+                            "Reconcile with the payment gateway (void/refund) manually."
+                        ),
+                    )
+                return booking  # sweeper: expected race outcome, not an error
+
+            # Idempotent: already Cancelled -> leave it alone, no error either way.
             if booking.booking_status != "Pending":
                 self.db.rollback()
                 return booking

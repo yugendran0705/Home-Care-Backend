@@ -169,6 +169,18 @@ class NurseRepository:
             func.ST_MakePoint(patient_lon, patient_lat), 4326
         )
 
+        # A nurse is unavailable for a Confirmed+Paid booking, OR any Pending
+        # booking - stale/abandoned Pending rows are auto-cancelled by the
+        # expiry sweeper within BOOKING_EXPIRY_SECONDS, so any Pending row
+        # still present can be treated as live without re-checking its age here.
+        booking_status_filter = or_(
+            and_(
+                models.Booking.booking_status == "Confirmed",
+                models.Booking.payment_status == "Paid",
+            ),
+            models.Booking.booking_status == "Pending",
+        )
+
         # --- BASE QUERY ---
         # Fix 2: NurseService → NurseAssociatedService (correct model name)
         # Fix 3: Nurse has no address_id; location lives on Address linked via User
@@ -279,8 +291,7 @@ class NurseRepository:
             overlapping_bookings = (
                 self.db.query(models.Booking.nurse_id)
                 .filter(
-                    models.Booking.booking_status == "Confirmed",
-                    models.Booking.payment_status == "Paid",
+                    booking_status_filter,
                     models.Booking.is_parent_booking == False,
                     or_(*booking_filters),
                 )
@@ -331,8 +342,7 @@ class NurseRepository:
             overlapping_bookings = (
                 self.db.query(models.Booking.nurse_id)
                 .filter(
-                    models.Booking.booking_status == "Confirmed",
-                    models.Booking.payment_status == "Paid",
+                    booking_status_filter,
                     models.Booking.is_parent_booking == False,
                     models.Booking.scheduled_start_time < buffered_end,
                     models.Booking.scheduled_end_time > buffered_start,

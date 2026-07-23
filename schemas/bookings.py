@@ -76,13 +76,6 @@ class PendingBookingRequest(BaseModel):
     notes: Optional[str] = None
 
 
-class PendingBookingResponse(BaseModel):
-    """Response for a successfully created pending booking + its pending payment."""
-    booking: BookingResponse
-    payment: PaymentResponse
-
-    class Config:
-        from_attributes = True
 
 
 class PaymentCallbackRequest(BaseModel):
@@ -121,6 +114,14 @@ class BookingResponse(BookingBase):
     booking_address: AddressResponse
     review: Optional[ReviewResponse] = None
     payment: Optional[PaymentResponse] = None
+
+    class Config:
+        from_attributes = True
+
+class PendingBookingResponse(BaseModel):
+    """Response for a successfully created pending booking + its pending payment."""
+    booking: BookingResponse
+    payment: PaymentResponse
 
     class Config:
         from_attributes = True

@@ -9,6 +9,7 @@ from repositories.blackout_dates import BlackoutDateRepository
 from schemas.blackout_dates import BlackoutDateCreate, BlackoutDateUpdate
 
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,28 @@ class BlackoutDateService:
         Returns:
             models.BlackoutDate: Newly created blackout date.
         """
+
+        start_tz = blackout_data.start_datetime.tzinfo
+        end_tz = blackout_data.end_datetime.tzinfo
+        if (start_tz is None) != (end_tz is None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start and end datetime must either both include timezone information or both be naive.",
+            )
+        now = datetime.now(tz=start_tz) if start_tz else datetime.now()
+
+        # Validate future dates
+        if blackout_data.start_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start datetime must be valid, not in the past.",
+            )
+
+        if blackout_data.end_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="End datetime must be valid, not in the past.",
+            )
 
         # Validate date range
         if blackout_data.start_datetime >= blackout_data.end_datetime:
@@ -164,6 +187,28 @@ class BlackoutDateService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="End datetime cannot be null.",
+            )
+
+        start_tz = start_datetime.tzinfo
+        end_tz = end_datetime.tzinfo
+        if (start_tz is None) != (end_tz is None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start and end datetime must either both include timezone information or both be naive.",
+            )
+        now = datetime.now(tz=start_tz) if start_tz else datetime.now()
+
+        # Validate future dates
+        if start_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Start datetime must be valid, not in the past.",
+            )
+
+        if end_datetime < now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="End datetime must be valid, not in the past.",
             )
 
         if start_datetime >= end_datetime:

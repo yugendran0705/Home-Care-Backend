@@ -25,6 +25,7 @@ router = APIRouter(
 )
 
 patient_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient"]))
+nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
 
 # Dependency to provide the SearchService
 def get_search_service(db: Session = Depends(get_db)) -> SearchService:
@@ -50,7 +51,9 @@ def search_available_nurses(
     Finds available nurses for the requested service, location, and booking window.
     """
     try:
-        return search_service.search_available_nurses(search_request=search_request)
+        return search_service.search_available_nurses(
+            search_request=search_request, patient_id=current_user.id
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -152,4 +155,64 @@ def fail_booking_payment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fail booking payment.",
+        ) from exc
+
+
+@router.get(
+    "/patient/{patient_id}",
+    response_model=List[BookingResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get all bookings for a patient",
+)
+def get_bookings_for_patient(
+    patient_id: uuid.UUID,
+    current_user: models.User = patient_dependency,
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    """
+    A Patient may only view their own bookings; Admin may view anyone's.
+    """
+    if current_user.user_type == "Patient" and current_user.id != patient_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You may only view your own bookings.",
+        )
+    try:
+        return booking_service.get_bookings_for_patient(patient_id=patient_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve bookings for patient.",
+        ) from exc
+
+
+@router.get(
+    "/nurse/{nurse_id}",
+    response_model=List[BookingResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get all bookings for a nurse",
+)
+def get_bookings_for_nurse(
+    nurse_id: uuid.UUID,
+    current_user: models.User = nurse_dependency,
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    """
+    A Nurse may only view their own bookings; Admin may view anyone's.
+    """
+    if current_user.user_type == "Nurse" and current_user.id != nurse_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You may only view your own bookings.",
+        )
+    try:
+        return booking_service.get_bookings_for_nurse(nurse_id=nurse_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve bookings for nurse.",
         ) from exc

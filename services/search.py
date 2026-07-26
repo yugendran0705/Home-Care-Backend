@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 from typing import List
 
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from repositories.nurses import NurseRepository
 from repositories.nursing_services import NursingServiceRepository
+from repositories.address import AddressRepository
 from schemas.search import NurseSearchRequest, NurseSearchResponse
 from utils.time_calculator import calculate_end_time, get_total_days
 
@@ -17,9 +19,23 @@ class SearchService:
         self.db = db
         self.nurse_repo = NurseRepository(db)
         self.service_repo = NursingServiceRepository(db)
+        self.address_repo = AddressRepository(db)
 
-    def search_available_nurses(self, search_request: NurseSearchRequest) -> List[NurseSearchResponse]:
-        """Return nurses that match the requested service, location, and time window."""
+    def search_available_nurses(
+        self, search_request: NurseSearchRequest, patient_id: uuid.UUID
+    ) -> List[NurseSearchResponse]:
+        """
+        Return nurses that match the requested service, location, and time
+        window. Location is the authenticated patient's primary address, not
+        caller-supplied coordinates.
+        """
+        primary_address = self.address_repo.get_primary_for_user(patient_id)
+        if not primary_address or primary_address.latitude is None or primary_address.longitude is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You must have a primary address with a set location to search for nurses.",
+            )
+
         service = self.service_repo.get_by_id(service_id=search_request.service_id)
         if not service:
             raise HTTPException(
@@ -62,8 +78,8 @@ class SearchService:
 
         nurses = self.nurse_repo.search_available_nurses(
             service_id=search_request.service_id,
-            patient_lat=search_request.patient_latitude,
-            patient_lon=search_request.patient_longitude,
+            patient_lat=float(primary_address.latitude),
+            patient_lon=float(primary_address.longitude),
             requested_start_time=requested_start_time,
             requested_end_time=requested_end_time,
             search_radius_meters=search_request.radius_meters or 8000,

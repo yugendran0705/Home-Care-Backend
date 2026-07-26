@@ -139,6 +139,36 @@ class NurseRepository:
         self.db.commit()
         return db_nurse
 
+    def is_within_distance(
+        self,
+        *,
+        nurse_id: uuid.UUID,
+        patient_lat: float,
+        patient_lon: float,
+        radius_meters: int,
+    ) -> bool:
+        """
+        True if the nurse's primary address is within radius_meters of the
+        given patient coordinates. Used to re-enforce the service-area radius
+        at booking time, since a caller could otherwise book a nurse_id
+        obtained some other way than the /search endpoint.
+        """
+        target_point = func.ST_SetSRID(
+            func.ST_MakePoint(patient_lon, patient_lat), 4326
+        )
+        match = (
+            self.db.query(models.Nurse.id)
+            .join(models.User, models.Nurse.id == models.User.id)
+            .join(models.Address, models.User.id == models.Address.user_id)
+            .filter(
+                models.Nurse.id == nurse_id,
+                models.Address.is_primary == True,
+                func.ST_DWithin(models.Address.location, target_point, radius_meters),
+            )
+            .first()
+        )
+        return match is not None
+
     def search_available_nurses(
         self,
         service_id: uuid.UUID,

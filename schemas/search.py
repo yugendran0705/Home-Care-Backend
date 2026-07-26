@@ -5,9 +5,12 @@ import uuid
 from typing import Optional
 
 class NurseSearchRequest(BaseModel):
+    """
+    patient_latitude/patient_longitude are intentionally not fields: the search
+    is anchored to the authenticated patient's primary Address, looked up
+    server-side, so a caller can't search from an arbitrary/spoofed location.
+    """
     service_id: uuid.UUID
-    patient_latitude: float = Field(..., ge=-90, le=90, description="Patient's current latitude")
-    patient_longitude: float = Field(..., ge=-180, le=180, description="Patient's current longitude")
     requested_start_time: datetime = Field(..., description="Desired start timestamp (ISO 8601 format)")
     radius_meters: Optional[int] = Field(8000, ge=1000, le=50000, description="Search radius in meters (Default 8KM)")
 

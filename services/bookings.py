@@ -2,16 +2,19 @@
 import time as time_module
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import List
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 import models
 from repositories.bookings import BookingRepository
+from repositories.nurses import NurseRepository
 from repositories.nursing_services import NursingServiceRepository
 from repositories.payments import PaymentRepository
 from repositories.blackout_dates import BlackoutDateRepository
 from repositories.working_hours import WorkingHoursRepository
+from repositories.address import AddressRepository
 from utils.scheduling import compute_service_windows, compute_required_segments
 from utils.redis import (
     nurse_booking_lock,
@@ -31,23 +34,53 @@ class BookingService:
     # Buffer for travel between back-to-back assignments (matches search logic).
     TRAVEL_BUFFER = timedelta(minutes=30)
 
+    # Hard service-area cap enforced at booking time, independent of whatever
+    # radius_meters a client passed to /search - a nurse_id obtained any other
+    # way must still fall within this distance of the patient's primary address.
+    MAX_BOOKING_DISTANCE_METERS = 8000
+
     def __init__(self, db: Session):
         self.db = db
         self.booking_repo = BookingRepository(db)
+        self.nurse_repo = NurseRepository(db)
         self.service_repo = NursingServiceRepository(db)
         self.payment_repo = PaymentRepository(db)
         self.blackout_repo = BlackoutDateRepository(db)
         self.working_hours_repo = WorkingHoursRepository(db)
+        self.address_repo = AddressRepository(db)
 
     # ------------------------------------------------------------------
     # Availability decision (business logic - orchestrates repo queries)
     # ------------------------------------------------------------------
-    def _assert_nurse_available(self, nurse_id: uuid.UUID, service, windows) -> None:
+    def _assert_nurse_available(
+        self, nurse_id: uuid.UUID, patient_id: uuid.UUID, service, windows
+    ) -> None:
         nurse = self.db.get(models.Nurse, nurse_id)
         if not nurse or not nurse.is_verified or not nurse.is_active:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Nurse is not available for booking.",
+            )
+
+        patient_address = self.address_repo.get_primary_for_user(patient_id)
+        if (
+            not patient_address
+            or patient_address.latitude is None
+            or patient_address.longitude is None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You must have a primary address with a set location to book a nurse.",
+            )
+        if not self.nurse_repo.is_within_distance(
+            nurse_id=nurse_id,
+            patient_lat=float(patient_address.latitude),
+            patient_lon=float(patient_address.longitude),
+            radius_meters=self.MAX_BOOKING_DISTANCE_METERS,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Nurse is outside your service area.",
             )
 
         if service.schedule_type == "Continuous" and not nurse.continuous_care_available:
@@ -133,7 +166,7 @@ class BookingService:
         try:
             with nurse_booking_lock(nurse_id):
                 try:
-                    self._assert_nurse_available(nurse_id, service, windows)
+                    self._assert_nurse_available(nurse_id, patient_id, service, windows)
 
                     base = {
                         "patient_id": patient_id,
@@ -356,6 +389,15 @@ class BookingService:
         cancel_booking_expiry(booking.id)  # remove timer if still present
         self.db.refresh(booking)
         return booking
+
+    # ------------------------------------------------------------------
+    # Read-only lookups
+    # ------------------------------------------------------------------
+    def get_bookings_for_patient(self, *, patient_id: uuid.UUID) -> List[models.Booking]:
+        return self.booking_repo.get_for_patient(patient_id=patient_id)
+
+    def get_bookings_for_nurse(self, *, nurse_id: uuid.UUID) -> List[models.Booking]:
+        return self.booking_repo.get_for_nurse(nurse_id=nurse_id)
 
     # ------------------------------------------------------------------
     def _get_payment_holder_for_update(self, booking_id: uuid.UUID) -> models.Booking:

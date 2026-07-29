@@ -1,11 +1,13 @@
 import uuid
 from sqlalchemy import (
-    Column, String, Boolean, Float, Time, ForeignKey, Text, Integer, DateTime, Date, UUID, Numeric
+    Column, String, Boolean, Float, Time, ForeignKey, Text, Integer, DateTime, Date, UUID, Numeric, JSON
 )
 from geoalchemy2 import Geography
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func # For default=func.now()
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+
 
 Base = declarative_base()
 
@@ -157,16 +159,31 @@ class Payment(Base):
     id = Column("payment_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.booking_id"), unique=True, nullable=False)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.patient_id"), nullable=False)
-    amount = Column(Numeric(10, 2), nullable=False) # DECIMAL(10,2) mapped to Numeric
+    amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False, default='INR')
-    payment_method = Column(String(50), nullable=True) # Nullable
-    transaction_id = Column(String(255), unique=True, nullable=True) # Nullable
+    payment_method = Column(String(50), nullable=True)
+    transaction_id = Column(String(255), unique=True, nullable=True)
     payment_status = Column(String(20), nullable=False, default='Initiated', comment='ENUM: Initiated, Success, Failed, Refunded')
-    payment_date = Column(DateTime(timezone=True), nullable=False, default=func.now())
 
-    # Relationships
+    gateway_order_id = Column(String(255), unique=True, nullable=True)
+    failure_reason = Column(String(255), nullable=True)
+    refund_id = Column(String(255), nullable=True)
+    refunded_amount = Column(Numeric(10, 2), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+
     booking = relationship("Booking", back_populates="payment")
     patient = relationship("Patient", back_populates="payments")
+
+class WebhookEvent(Base):
+    __tablename__ = "webhook_events"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider = Column(String(50), nullable=False, default="razorpay")
+    event_id = Column(String(255), unique=True, nullable=False)
+    event_type = Column(String(100), nullable=False)
+    payload = Column(JSONB, nullable=False)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    processing_error = Column(String(500), nullable=True)
 
 class NurseDocument(Base):
     __tablename__ = "nurse_documents"

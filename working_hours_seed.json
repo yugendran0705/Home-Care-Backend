@@ -1,0 +1,56 @@
+[
+  {
+    "name": "weekday_9_to_5",
+    "slots": [
+      { "day_of_week": 0, "start_time": "09:00:00", "end_time": "17:00:00" },
+      { "day_of_week": 1, "start_time": "09:00:00", "end_time": "17:00:00" },
+      { "day_of_week": 2, "start_time": "09:00:00", "end_time": "17:00:00" },
+      { "day_of_week": 3, "start_time": "09:00:00", "end_time": "17:00:00" },
+      { "day_of_week": 4, "start_time": "09:00:00", "end_time": "17:00:00" }
+    ]
+  },
+  {
+    "name": "early_shift_weekdays",
+    "slots": [
+      { "day_of_week": 0, "start_time": "06:00:00", "end_time": "14:00:00" },
+      { "day_of_week": 1, "start_time": "06:00:00", "end_time": "14:00:00" },
+      { "day_of_week": 2, "start_time": "06:00:00", "end_time": "14:00:00" },
+      { "day_of_week": 3, "start_time": "06:00:00", "end_time": "14:00:00" },
+      { "day_of_week": 4, "start_time": "06:00:00", "end_time": "14:00:00" }
+    ]
+  },
+  {
+    "name": "night_shift_weekdays",
+    "slots": [
+      { "day_of_week": 0, "start_time": "20:00:00", "end_time": "23:59:59" },
+      { "day_of_week": 1, "start_time": "20:00:00", "end_time": "23:59:59" },
+      { "day_of_week": 2, "start_time": "20:00:00", "end_time": "23:59:59" },
+      { "day_of_week": 3, "start_time": "20:00:00", "end_time": "23:59:59" },
+      { "day_of_week": 4, "start_time": "20:00:00", "end_time": "23:59:59" }
+    ]
+  },
+  {
+    "name": "three_day_week",
+    "slots": [
+      { "day_of_week": 0, "start_time": "08:00:00", "end_time": "18:00:00" },
+      { "day_of_week": 2, "start_time": "08:00:00", "end_time": "18:00:00" },
+      { "day_of_week": 4, "start_time": "08:00:00", "end_time": "18:00:00" }
+    ]
+  },
+  {
+    "name": "weekend_coverage",
+    "slots": [
+      { "day_of_week": 5, "start_time": "08:00:00", "end_time": "20:00:00" },
+      { "day_of_week": 6, "start_time": "08:00:00", "end_time": "20:00:00" }
+    ]
+  },
+  {
+    "name": "split_weekday_and_weekend",
+    "slots": [
+      { "day_of_week": 1, "start_time": "10:00:00", "end_time": "18:00:00" },
+      { "day_of_week": 3, "start_time": "10:00:00", "end_time": "18:00:00" },
+      { "day_of_week": 5, "start_time": "09:00:00", "end_time": "15:00:00" },
+      { "day_of_week": 6, "start_time": "09:00:00", "end_time": "15:00:00" }
+    ]
+  }
+]

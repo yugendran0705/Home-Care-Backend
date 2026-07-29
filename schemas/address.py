@@ -30,6 +30,7 @@ class AddressBase(BaseModel):
         description="Longitude of the address", 
         examples=[80.2497]
     )
+    
     is_primary: bool = Field(False, description="Whether this is the primary address for the user")
 
 class AddressCreate(AddressBase):

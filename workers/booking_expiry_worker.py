@@ -18,7 +18,12 @@ import uuid
 
 from config.database import SessionLocal
 from services.bookings import BookingService
-from utils.redis import get_due_booking_expiries, peek_next_booking_expiry
+from utils.redis import (
+    cancel_booking_expiry,
+    get_due_booking_expiries,
+    peek_next_booking_expiry,
+    schedule_booking_expiry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,10 @@ logger = logging.getLogger(__name__)
 # periodically even if Redis was briefly unavailable when we last peeked.
 MAX_SLEEP_SECONDS = 30
 BATCH_LIMIT = 100
+# On an unexpected failure, push the timer into the future rather than dropping
+# it (would leak a Pending booking that never expires) or leaving it overdue
+# (would spin the loop) - an at-least-once retry with backoff.
+RETRY_BACKOFF_SECONDS = 60
 
 
 def _process_due_bookings(now_ts: float) -> int:
@@ -45,12 +54,20 @@ def _process_due_bookings(now_ts: float) -> int:
             try:
                 booking_id = uuid.UUID(raw_id)
             except ValueError:
-                logger.warning("Skipping malformed booking id in expiry ZSET: %r", raw_id)
+                logger.warning("Dropping malformed booking id from expiry ZSET: %r", raw_id)
+                cancel_booking_expiry(raw_id)
                 continue
             try:
                 service.cancel_if_still_pending(booking_id)
             except Exception:
-                logger.exception("Failed to expire booking %s", booking_id)
+                logger.exception(
+                    "Failed to expire booking %s; retrying in %ss",
+                    booking_id,
+                    RETRY_BACKOFF_SECONDS,
+                )
+                schedule_booking_expiry(booking_id, time.time() + RETRY_BACKOFF_SECONDS)
+                continue
+            cancel_booking_expiry(booking_id)
     finally:
         db.close()
 

@@ -168,21 +168,17 @@ class BookingRepository:
         *,
         nurse_id: uuid.UUID,
         windows: List[Tuple[datetime, datetime]],
-        pending_active_since: datetime,
         travel_buffer: timedelta,
     ) -> bool:
         """
-        True if the nurse has a Confirmed booking, or an active (not-yet-expired)
-        Pending booking, overlapping any of the given (start, end) windows.
-        Only child/standalone rows carry real time slots; parent bookings are
-        billing wrappers and are excluded.
+        True if the nurse has a Confirmed booking, or ANY Pending booking,
+        overlapping any of the given (start, end) windows. Only child/standalone
+        rows carry real time slots; parent bookings are billing wrappers and are
+        excluded.
         """
         status_filter = or_(
             models.Booking.booking_status == "Confirmed",
-            and_(
-                models.Booking.booking_status == "Pending",
-                models.Booking.booking_time >= pending_active_since,
-            ),
+            models.Booking.booking_status == "Pending",
         )
         overlap_filters = [
             and_(

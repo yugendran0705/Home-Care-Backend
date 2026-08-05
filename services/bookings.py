@@ -26,10 +26,9 @@ from utils.redis import (
 
 
 class BookingService:
-    # A Pending booking holds the slot for this long; kept in sync with the ZSET
-    # expiry timer so the availability check and the sweeper agree on when an
-    # unpaid booking stops blocking other patients.
-    PENDING_HOLD_MINUTES = BOOKING_EXPIRY_SECONDS // 60  # 10 minutes
+    # NOTE: a Pending booking blocks its slot until the expiry sweeper flips it
+    # to Cancelled - there is deliberately no age cutoff in the availability
+    # check. See BookingRepository.find_conflicting for why.
 
     # Buffer for travel between back-to-back assignments (matches search logic).
     TRAVEL_BUFFER = timedelta(minutes=30)
@@ -95,13 +94,9 @@ class BookingService:
                 detail="Nurse is on leave during the requested time.",
             )
 
-        pending_active_since = datetime.now(timezone.utc) - timedelta(
-            minutes=self.PENDING_HOLD_MINUTES
-        )
         if self.booking_repo.find_conflicting(
             nurse_id=nurse_id,
             windows=windows,
-            pending_active_since=pending_active_since,
             travel_buffer=self.TRAVEL_BUFFER,
         ):
             raise HTTPException(

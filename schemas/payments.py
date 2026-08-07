@@ -22,15 +22,15 @@ class PaymentCreate(PaymentBase):
     """Used internally to create the Payment row before calling Razorpay Orders API."""
     pass
 
-
 class PaymentUpdate(BaseModel):
-    """
-    Schema for updating a payment, typically after a webhook from a payment gateway.
-    All fields are optional.
-    """
-    payment_status: Optional[str] = Field(None, examples=["Success", "Failed"])
+    payment_status: Optional[str] = Field(None, examples=["Success", "Failed", "Refunded"])
     transaction_id: Optional[str] = Field(None, max_length=255)
     payment_method: Optional[str] = Field(None, max_length=50)
+    gateway_order_id: Optional[str] = None
+    failure_reason: Optional[str] = Field(None, max_length=255)
+    refund_id: Optional[str] = None
+    refunded_amount: Optional[Decimal] = Field(None, decimal_places=2)
+
 
 
 class PaymentResponse(PaymentBase):
@@ -69,22 +69,15 @@ class PaymentVerifyResponse(BaseModel):
     verified: bool
 
 
-class PaymentUpdate(BaseModel):
-    payment_status: Optional[str] = Field(None, examples=["Success", "Failed", "Refunded"])
-    transaction_id: Optional[str] = Field(None, max_length=255)
-    payment_method: Optional[str] = Field(None, max_length=50)
-    gateway_order_id: Optional[str] = None
-    failure_reason: Optional[str] = Field(None, max_length=255)
-    refund_id: Optional[str] = None
-    refunded_amount: Optional[Decimal] = Field(None, decimal_places=2)
 
 
 
-class RazorpayWebhookPayload(BaseModel):
-    """Shape of the raw envelope Razorpay POSTs to your webhook endpoint."""
-    entity: str
-    account_id: str
-    event: str                     # e.g. "payment.captured"
-    contains: list[str]
-    payload: dict                  # nested {payment: {entity: {...}}} etc — keep raw
-    created_at: int
+class RazorpayOrderResponse(BaseModel):
+
+    payment_id: uuid.UUID
+    razorpay_order_id: str
+    amount: Decimal
+    currency: str
+    razorpay_key_id: str
+
+

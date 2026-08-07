@@ -175,16 +175,6 @@ class Payment(Base):
     booking = relationship("Booking", back_populates="payment")
     patient = relationship("Patient", back_populates="payments")
 
-class WebhookEvent(Base):
-    __tablename__ = "webhook_events"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    provider = Column(String(50), nullable=False, default="razorpay")
-    event_id = Column(String(255), unique=True, nullable=False)
-    event_type = Column(String(100), nullable=False)
-    payload = Column(JSONB, nullable=False)
-    received_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
-    processing_error = Column(String(500), nullable=True)
-
 class NurseDocument(Base):
     __tablename__ = "nurse_documents"
     id = Column("document_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

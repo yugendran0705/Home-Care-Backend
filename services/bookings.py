@@ -1,11 +1,14 @@
 # services/bookings.py
+import logging
 import time as time_module
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import List
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 import models
 from repositories.bookings import BookingRepository
@@ -18,7 +21,7 @@ from repositories.address import AddressRepository
 from utils.scheduling import compute_service_windows, compute_required_segments
 from utils.redis import (
     nurse_booking_lock,
-    schedule_booking_expiry,
+    schedule_booking_expiry_with_retry,
     cancel_booking_expiry,
     BOOKING_EXPIRY_SECONDS,
     LockAcquisitionError,
@@ -224,7 +227,32 @@ class BookingService:
         self.db.refresh(payment)
 
         # Scheduled AFTER commit - absolute epoch timestamp, timezone-agnostic.
-        schedule_booking_expiry(booking.id, time_module.time() + BOOKING_EXPIRY_SECONDS)
+        # A Pending booking with no timer would block this nurse's slot forever
+        # (find_conflicting has no age cutoff by design). If Redis is still
+        # unreachable after schedule_booking_expiry_with_retry's own retries,
+        # fail closed: cancel the booking through the same path a payment
+        # failure/timeout would use, rather than returning success for an
+        # unprotected booking.
+        if not schedule_booking_expiry_with_retry(
+            booking.id, time_module.time() + BOOKING_EXPIRY_SECONDS
+        ):
+            logger.error(
+                "Could not schedule expiry timer for booking %s; cancelling.", booking.id
+            )
+            try:
+                self._cancel_if_pending(booking.id)
+            except Exception:
+                logger.exception(
+                    "Compensating cancel also failed for booking %s; it may be stuck "
+                    "Pending with no expiry timer until the reconciliation backstop "
+                    "catches it.",
+                    booking.id,
+                )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Booking could not be completed due to a temporary system issue. Please try again.",
+            )
+
         return {"booking": booking, "payment": payment}
 
     # ------------------------------------------------------------------

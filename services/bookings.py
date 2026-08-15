@@ -21,7 +21,7 @@ from repositories.address import AddressRepository
 from utils.scheduling import compute_service_windows, compute_required_segments
 from utils.redis import (
     nurse_booking_lock,
-    schedule_booking_expiry,
+    schedule_booking_expiry_with_retry,
     cancel_booking_expiry,
     BOOKING_EXPIRY_SECONDS,
     LockAcquisitionError,

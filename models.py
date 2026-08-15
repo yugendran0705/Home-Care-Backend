@@ -1,12 +1,11 @@
 import uuid
 from sqlalchemy import (
-    Column, String, Boolean, Float, Time, ForeignKey, Text, Integer, DateTime, Date, UUID, Numeric, JSON
+    Column, String, Boolean, Time, ForeignKey, Text, Integer, DateTime, Date, UUID, Numeric
 )
 from geoalchemy2 import Geography
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func # For default=func.now()
-from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 
 Base = declarative_base()

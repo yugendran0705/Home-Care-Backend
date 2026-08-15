@@ -21,8 +21,6 @@ from config.razorpay import get_razorpay_client, RAZORPAY_WEBHOOK_SECRET
 
 logger = logging.getLogger(__name__)
 
-razorpay_client = get_razorpay_client()
-
 
 class PaymentService:
     """
@@ -37,12 +35,12 @@ class PaymentService:
     webhook handling) relies on that invariant.
     """
 
-    def __init__(self, db: Session, razorpay_client=razorpay_client):
+    def __init__(self, db: Session, razorpay_client=None):
         self.db = db
         self.payment_repo = PaymentRepository(db)
         self.booking_service = BookingService(db)
 
-        self.razorpay = razorpay_client
+        self.razorpay = razorpay_client or get_razorpay_client()
 
     # ------------------------------------------------------------------
     # 1. Order creation — the only entry point for a new Payment row

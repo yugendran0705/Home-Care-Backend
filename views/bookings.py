@@ -86,7 +86,6 @@ def create_booking(
             nurse_id=booking_request.nurse_id,
             service_id=booking_request.service_id,
             scheduled_start_time=booking_request.scheduled_start_time,
-            booking_address_id=booking_request.booking_address_id,
             notes=booking_request.notes,
         )
     except HTTPException:

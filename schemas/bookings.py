@@ -57,22 +57,16 @@ class BookingCreate(BookingBase):
 
 class PendingBookingRequest(BaseModel):
     """
-    Schema for a patient's booking request. scheduled_end_time and
-    total_amount are intentionally absent - BookingService derives them from
-    the service's duration/duration_type/shift_duration_hours and base_price,
-    so a caller can't misstate either. patient_id and parent_booking_id are
-    also not fields: patient_id comes from the authenticated user, and
-    parent_booking_id is an internal linkage BookingService sets itself when
-    it creates a Daily_Shift booking's child rows - a client has no legitimate
-    reason to set it and allowing it would let a caller attach a bogus link to
-    someone else's booking.
+    Schema for a patient's booking request. patient_id, parent_booking_id,
+    booking_address_id, scheduled_end_time, and total_amount are all
+    server-derived, not client-supplied - each would otherwise let a caller
+    spoof another user's identity, booking, address, or price.
     """
     nurse_id: uuid.UUID
     service_id: uuid.UUID
     scheduled_start_time: datetime = Field(
         ..., description="Desired start timestamp (ISO 8601). Naive values are treated as IST."
     )
-    booking_address_id: uuid.UUID
     notes: Optional[str] = None
 
 

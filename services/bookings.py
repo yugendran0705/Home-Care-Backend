@@ -56,7 +56,11 @@ class BookingService:
     # ------------------------------------------------------------------
     def _assert_nurse_available(
         self, nurse_id: uuid.UUID, patient_id: uuid.UUID, service, windows
-    ) -> None:
+    ) -> models.Address:
+        """
+        Returns the patient's primary address (also the resolved booking
+        address - see create_booking) after validating the nurse is bookable.
+        """
         nurse = self.db.get(models.Nurse, nurse_id)
         if not nurse or not nurse.is_verified or not nurse.is_active:
             raise HTTPException(
@@ -117,6 +121,8 @@ class BookingService:
                     detail="Nurse does not work during the requested shift hours.",
                 )
 
+        return patient_address
+
     # ------------------------------------------------------------------
     # Create pending booking + pending payment (atomic, lock-guarded)
     # ------------------------------------------------------------------
@@ -126,7 +132,6 @@ class BookingService:
         nurse_id: uuid.UUID,
         service_id: uuid.UUID,
         scheduled_start_time: datetime,
-        booking_address_id: uuid.UUID,
         notes: str = None,
     ) -> dict:
         """
@@ -144,6 +149,9 @@ class BookingService:
         For Continuous services this creates a single standalone Booking. For
         Daily_Shift services it creates a parent Booking (billing wrapper,
         holds the Payment) plus one child Booking per shift day.
+
+        booking_address_id is always the patient's primary address, resolved
+        server-side - never a client-supplied field (avoids IDOR).
         """
         service = self.service_repo.get_by_id(service_id=service_id)
         if not service:
@@ -164,14 +172,16 @@ class BookingService:
         try:
             with nurse_booking_lock(nurse_id):
                 try:
-                    self._assert_nurse_available(nurse_id, patient_id, service, windows)
+                    patient_address = self._assert_nurse_available(
+                        nurse_id, patient_id, service, windows
+                    )
 
                     base = {
                         "patient_id": patient_id,
                         "nurse_id": nurse_id,
                         "service_id": service_id,
                         "total_amount": service.base_price,
-                        "booking_address_id": booking_address_id,
+                        "booking_address_id": patient_address.id,
                         "notes": notes,
                     }
 

@@ -110,6 +110,19 @@ class PaymentRepository:
         statement = select(models.Payment).where(models.Payment.patient_id == patient_id)
         return self.db.execute(statement).scalars().all()
 
+    def get_by_gateway_order_id(self, *, gateway_order_id: str) -> Optional[models.Payment]:
+        """
+        Retrieves a payment by its Razorpay gateway order ID.
+
+        Args:
+            gateway_order_id (str): The Razorpay order ID.
+
+        Returns:
+            Optional[models.Payment]: The Payment object if found, otherwise None.
+        """
+        statement = select(models.Payment).where(models.Payment.gateway_order_id == gateway_order_id)
+        return self.db.execute(statement).scalar_one_or_none()
+
     def update(self, *, payment_id: uuid.UUID, updates: Dict[str, Any]) -> Optional[models.Payment]:
         """
         Updates a payment record. This is useful for updating status,

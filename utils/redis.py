@@ -1,3 +1,4 @@
+import time
 from contextlib import contextmanager
 
 from redis.exceptions import LockError
@@ -96,6 +97,32 @@ def schedule_booking_expiry(booking_id, fire_at_ts: float) -> bool:
     except Exception as e:
         logger.warning(f"Redis schedule_booking_expiry failed for '{booking_id}': {e}")
         return False
+
+
+# Retry budget for absorbing a momentary Redis blip when scheduling a
+# booking's expiry timer, before the caller treats it as a real outage.
+SCHEDULE_EXPIRY_MAX_ATTEMPTS = 3
+SCHEDULE_EXPIRY_RETRY_DELAY_SECONDS = 0.2
+
+
+def schedule_booking_expiry_with_retry(
+    booking_id,
+    fire_at_ts: float,
+    max_attempts: int = SCHEDULE_EXPIRY_MAX_ATTEMPTS,
+    retry_delay: float = SCHEDULE_EXPIRY_RETRY_DELAY_SECONDS,
+) -> bool:
+    """
+    Like schedule_booking_expiry, but retries a few times on failure before
+    giving up. A single dropped connection or momentary network hiccup
+    shouldn't be treated the same as a real outage - this absorbs that.
+    Returns False only after every attempt has failed.
+    """
+    for attempt in range(max_attempts):
+        if schedule_booking_expiry(booking_id, fire_at_ts):
+            return True
+        if attempt < max_attempts - 1:
+            time.sleep(retry_delay)
+    return False
 
 
 def cancel_booking_expiry(booking_id) -> bool:

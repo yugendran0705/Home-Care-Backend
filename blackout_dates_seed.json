@@ -1,8 +1,0 @@
-[
-  { "start_offset_days": 14, "duration_days": 2, "reason": "Vacation" },
-  { "start_offset_days": 21, "duration_days": 1, "reason": "Personal leave" },
-  { "start_offset_days": 30, "duration_days": 3, "reason": "Family emergency" },
-  { "start_offset_days": 45, "duration_days": 1, "reason": "Sick leave" },
-  { "start_offset_days": 60, "duration_days": 2, "reason": "Training" },
-  { "start_offset_days": 75, "duration_days": 3, "reason": "Conference" }
-]

@@ -55,6 +55,23 @@ class BookingCreate(BookingBase):
     is_parent_booking: bool = False
 
 
+class PendingBookingRequest(BaseModel):
+    """
+    Schema for a patient's booking request. patient_id, parent_booking_id,
+    booking_address_id, scheduled_end_time, and total_amount are all
+    server-derived, not client-supplied - each would otherwise let a caller
+    spoof another user's identity, booking, address, or price.
+    """
+    nurse_id: uuid.UUID
+    service_id: uuid.UUID
+    scheduled_start_time: datetime = Field(
+        ..., description="Desired start timestamp (ISO 8601). Naive values are treated as IST."
+    )
+    notes: Optional[str] = None
+
+
+
+
 class BookingUpdate(BaseModel):
     """
     Schema for updating a booking. All fields are optional.
@@ -81,6 +98,20 @@ class BookingResponse(BookingBase):
     booking_address: AddressResponse
     review: Optional[ReviewResponse] = None
     payment: Optional[PaymentResponse] = None
+
+    class Config:
+        from_attributes = True
+
+class PendingBookingResponse(BaseModel):
+    """
+    Response for a successfully created pending booking + its pending payment.
+    payment.gateway_order_id is the Razorpay order id; combined with
+    razorpay_key_id, amount, and currency, the frontend has everything it
+    needs to open Razorpay Checkout.
+    """
+    booking: BookingResponse
+    payment: PaymentResponse
+    razorpay_key_id: str
 
     class Config:
         from_attributes = True

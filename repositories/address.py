@@ -45,6 +45,19 @@ class AddressRepository:
         """
         return self.db.query(models.Address).filter(models.Address.user_id == user_id).all()
 
+    def get_primary_for_user(self, user_id: uuid.UUID) -> Optional[models.Address]:
+        """
+        Retrieves the user's primary address, or None if they don't have one.
+        """
+        return (
+            self.db.query(models.Address)
+            .filter(
+                models.Address.user_id == user_id,
+                models.Address.is_primary == True,
+            )
+            .first()
+        )
+
     def update(self, address: models.Address, updates: Dict[str, Any]) -> models.Address:
         """
         Updates an existing address record.

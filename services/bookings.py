@@ -18,6 +18,7 @@ from repositories.payments import PaymentRepository
 from repositories.blackout_dates import BlackoutDateRepository
 from repositories.working_hours import WorkingHoursRepository
 from repositories.address import AddressRepository
+from config.razorpay import get_razorpay_client
 from utils.scheduling import compute_service_windows, compute_required_segments
 from utils.redis import (
     nurse_booking_lock,
@@ -41,7 +42,7 @@ class BookingService:
     # way must still fall within this distance of the patient's primary address.
     MAX_BOOKING_DISTANCE_METERS = 8000
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, razorpay_client=None):
         self.db = db
         self.booking_repo = BookingRepository(db)
         self.nurse_repo = NurseRepository(db)
@@ -50,6 +51,17 @@ class BookingService:
         self.blackout_repo = BlackoutDateRepository(db)
         self.working_hours_repo = WorkingHoursRepository(db)
         self.address_repo = AddressRepository(db)
+        # Lazy: built on first access (see `razorpay` property) rather than
+        # here, so call sites that never touch payments (e.g. the expiry
+        # sweeper, which only calls cancel_if_still_pending) don't crash on
+        # missing/invalid Razorpay credentials in their deployment env.
+        self._razorpay_client = razorpay_client
+
+    @property
+    def razorpay(self):
+        if self._razorpay_client is None:
+            self._razorpay_client = get_razorpay_client()
+        return self._razorpay_client
 
     # ------------------------------------------------------------------
     # Availability decision (business logic - orchestrates repo queries)
@@ -236,6 +248,66 @@ class BookingService:
         self.db.refresh(booking)
         self.db.refresh(payment)
 
+        # Razorpay order creation (external call) happens AFTER commit, same
+        # reasoning as the expiry-timer scheduling below: keep the nurse lock
+        # held for as little time as possible. If the gateway call fails,
+        # there's no way for the patient to ever pay for this booking, so
+        # cancel it outright rather than leaving it Pending.
+        try:
+            rp_order = self.razorpay.order.create(
+                data={
+                    # Razorpay expects amount as an integer in the currency's
+                    # smallest unit (paise for INR), not rupees.
+                    "amount": int(payment.amount * 100),
+                    "currency": payment.currency,
+                    "receipt": str(payment.id),
+                }
+            )
+        except Exception:
+            logger.exception(
+                "Razorpay order creation failed for booking %s / payment %s; cancelling.",
+                booking.id, payment.id,
+            )
+            self.payment_repo.update(
+                payment_id=payment.id,
+                updates={"failure_reason": "Gateway order creation failed"},
+            )
+            try:
+                self._cancel_if_pending(booking.id)
+            except Exception:
+                logger.exception(
+                    "Compensating cancel also failed for booking %s after a gateway "
+                    "order-creation failure.",
+                    booking.id,
+                )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not initiate payment with the payment gateway. Please try again.",
+            )
+
+        try:
+            payment = self.payment_repo.update(
+                payment_id=payment.id,
+                updates={"gateway_order_id": rp_order["id"]},
+            )
+        except Exception:
+            logger.exception(
+                "Persisting gateway_order_id failed for booking %s / payment %s; cancelling.",
+                booking.id, payment.id,
+            )
+            try:
+                self._cancel_if_pending(booking.id)
+            except Exception:
+                logger.exception(
+                    "Compensating cancel also failed for booking %s after a "
+                    "gateway_order_id persistence failure.",
+                    booking.id,
+                )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Booking could not be completed due to a temporary system issue. Please try again.",
+            )
+
         # Scheduled AFTER commit - absolute epoch timestamp, timezone-agnostic.
         # A Pending booking with no timer would block this nurse's slot forever
         # (find_conflicting has no age cutoff by design). If Redis is still
@@ -263,7 +335,11 @@ class BookingService:
                 detail="Booking could not be completed due to a temporary system issue. Please try again.",
             )
 
-        return {"booking": booking, "payment": payment}
+        return {
+            "booking": booking,
+            "payment": payment,
+            "razorpay_key_id": self.razorpay.auth[0],
+        }
 
     # ------------------------------------------------------------------
     # Payment succeeded -> confirm booking (atomic, row-locked)
@@ -313,6 +389,12 @@ class BookingService:
                 transaction_id=transaction_id,
                 payment_method=payment_method,
             )
+            # Clear any failure_reason left over from an earlier declined
+            # attempt on this same order - fail_booking no longer cancels on
+            # a decline (see fail_booking), so a Success here commonly
+            # follows one or more failed attempts, and a stale decline
+            # message on an otherwise-successful payment is confusing.
+            payment.failure_reason = None
             self.booking_repo.set_status(
                 booking=booking, booking_status="Confirmed", payment_status="Paid"
             )
@@ -336,24 +418,57 @@ class BookingService:
         return booking
 
     # ------------------------------------------------------------------
-    # Payment failed / 10-min timeout -> cancel booking (atomic, row-locked)
+    # Payment attempt declined -> record it, but keep the booking Pending
     # ------------------------------------------------------------------
     def fail_booking(self, booking_id: uuid.UUID, transaction_id: str = None) -> models.Booking:
         """
-        Payment gateway reported failure -> cancel the (still-Pending) booking.
-        Raises 409 if the booking was already Confirmed: that means payment
-        actually succeeded before this failure callback arrived, a genuine
-        conflict between signals that must be surfaced (and reconciled -
-        void/refund) rather than silently returning 200 with the booking
-        untouched.
+        Payment gateway reported a declined/failed attempt against this
+        booking's order. This intentionally does NOT cancel the booking.
+
+        Razorpay (like most gateways) lets a customer retry a different
+        card against the SAME order after a decline, and fires
+        payment.failed per attempt - not once, when the order is actually
+        abandoned. Cancelling here would release the nurse's slot on the
+        first declined card; if a retry then succeeded, confirm_booking
+        would refuse to confirm a booking that's no longer Pending, and
+        the successful charge would be stranded with nothing in our system
+        reflecting it. Only the expiry-timeout sweeper
+        (cancel_if_still_pending) or an explicit customer cancellation
+        actually cancels a Pending booking now.
         """
-        return self._cancel_if_pending(
-            booking_id, transaction_id=transaction_id, raise_if_already_confirmed=True
-        )
+        try:
+            booking = self._get_payment_holder_for_update(booking_id)
+
+            if booking.booking_status != "Pending":
+                # Already Confirmed (this failure is for a stale/earlier
+                # attempt that lost the race) or already Cancelled (expired
+                # via the sweeper) - terminal state wins, leave it alone.
+                self.db.rollback()
+                return booking
+
+            payment = self.payment_repo.get_by_booking_id(booking_id=booking.id)
+            if payment and payment.payment_status not in ("Success", "Refunded"):
+                self.payment_repo.set_status(
+                    payment=payment,
+                    payment_status="Failed",
+                    transaction_id=transaction_id,
+                )
+
+            self.db.commit()
+        except HTTPException:
+            raise
+        except Exception:
+            self.db.rollback()
+            raise
+
+        self.db.refresh(booking)
+        return booking
 
     def cancel_if_still_pending(self, booking_id: uuid.UUID):
         """
-        Called by the expiry sweeper when the ZSET timer fires. Finding the
+        Called by the expiry sweeper when the ZSET timer fires - the only
+        remaining path that actually cancels a Pending booking (see
+        fail_booking for why a payment decline no longer does). Finding the
         booking already Confirmed here is the EXPECTED outcome of the
         webhook-vs-timer race (the webhook won) - a silent no-op, not an error.
         Already-Cancelled is likewise a harmless idempotent no-op.
@@ -365,7 +480,6 @@ class BookingService:
         booking_id: uuid.UUID,
         transaction_id: str = None,
         silent_if_missing: bool = False,
-        raise_if_already_confirmed: bool = False,
     ):
         try:
             try:
@@ -376,20 +490,8 @@ class BookingService:
                     return None
                 raise
 
-            if booking.booking_status == "Confirmed":
-                self.db.rollback()
-                if raise_if_already_confirmed:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail=(
-                            "Booking is already Confirmed/Paid; a payment-failed "
-                            "callback arrived after success was already processed. "
-                            "Reconcile with the payment gateway (void/refund) manually."
-                        ),
-                    )
-                return booking  # sweeper: expected race outcome, not an error
-
-            # Idempotent: already Cancelled -> leave it alone, no error either way.
+            # Idempotent: already terminal (Confirmed or Cancelled) -> leave
+            # it alone, no error either way.
             if booking.booking_status != "Pending":
                 self.db.rollback()
                 return booking
@@ -426,11 +528,11 @@ class BookingService:
     # ------------------------------------------------------------------
     # Read-only lookups
     # ------------------------------------------------------------------
-    def get_bookings_for_patient(self, *, patient_id: uuid.UUID) -> List[models.Booking]:
-        return self.booking_repo.get_for_patient(patient_id=patient_id)
+    def get_bookings_for_user(self, *, user_id: uuid.UUID) -> List[models.Booking]:
+        return self.booking_repo.get_for_user(user_id=user_id)
 
-    def get_bookings_for_nurse(self, *, nurse_id: uuid.UUID) -> List[models.Booking]:
-        return self.booking_repo.get_for_nurse(nurse_id=nurse_id)
+    def list_all_bookings(self, *, skip: int = 0, limit: int = 100) -> List[models.Booking]:
+        return self.booking_repo.list_all(skip=skip, limit=limit)
 
     # ------------------------------------------------------------------
     def _get_payment_holder_for_update(self, booking_id: uuid.UUID) -> models.Booking:

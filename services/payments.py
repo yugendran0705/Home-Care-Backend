@@ -6,6 +6,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from razorpay.errors import SignatureVerificationError
 
 from repositories.payments import PaymentRepository
 from services.bookings import BookingService
@@ -14,6 +15,7 @@ from schemas.payments import (
     PaymentUpdate,
     PaymentResponse,
     RazorpayOrderCreate,
+    RazorpayOrderResponse,
     PaymentVerifyRequest,
     PaymentVerifyResponse,
 )
@@ -28,11 +30,16 @@ class PaymentService:
     including Razorpay order creation, checkout verification, and
     webhook processing.
 
-    Note: there is no standalone create_payment(). create_order() is the
-    only way a Payment row gets created — it always originates from a
-    Razorpay order, so a payment can never exist without a
-    gateway_order_id. Every downstream lookup (verify_checkout,
-    webhook handling) relies on that invariant.
+    There is no standalone create_payment() - a Payment row is only ever
+    created alongside a Razorpay order, either here (create_order(), a
+    generic entry point) or inline in BookingService.create_booking (the
+    primary path: booking + payment + Razorpay order all happen together so
+    the frontend gets everything it needs, in one response, to open Razorpay
+    Checkout). Either path marks the row Failed rather than leaving it
+    dangling in Initiated if the gateway call fails, so a Payment can exist
+    without ever getting a gateway_order_id - verify_checkout/handle_webhook
+    look payments up BY gateway_order_id, so such a row is simply
+    unreachable from those paths rather than mishandled.
     """
 
     def __init__(self, db: Session, razorpay_client=None):
@@ -46,7 +53,7 @@ class PaymentService:
     # 1. Order creation — the only entry point for a new Payment row
     # ------------------------------------------------------------------
 
-    def create_order(self, *, order_in: RazorpayOrderCreate) -> PaymentResponse:
+    def create_order(self, *, order_in: RazorpayOrderCreate) -> RazorpayOrderResponse:
         """
         Creates the internal Payment row (status=Initiated), then creates
         a matching order with Razorpay. If the gateway call fails, the
@@ -70,10 +77,14 @@ class PaymentService:
             )
 
         try:
-            rp_order = self.razorpay.create_order(
-                amount=order_in.amount,
-                currency=order_in.currency,
-                receipt=str(payment.id),
+            rp_order = self.razorpay.order.create(
+                data={
+                    # Razorpay expects the amount as an integer in the
+                    # currency's smallest unit (paise for INR), not rupees.
+                    "amount": int(order_in.amount * 100),
+                    "currency": order_in.currency,
+                    "receipt": str(payment.id),
+                }
             )
         except Exception as e:
             logger.error(f"Razorpay order creation failed for payment {payment.id}: {e}")
@@ -94,12 +105,12 @@ class PaymentService:
             updates={"gateway_order_id": rp_order["id"]},
         )
 
-        return PaymentResponse(
+        return RazorpayOrderResponse(
             payment_id=updated_payment.id,
             razorpay_order_id=rp_order["id"],
             amount=updated_payment.amount,
             currency=updated_payment.currency,
-            razorpay_key_id=self.razorpay.key_id,
+            razorpay_key_id=self.razorpay.auth[0],
         )
 
     # ------------------------------------------------------------------
@@ -121,11 +132,19 @@ class PaymentService:
                 detail=f"No payment matches order id: {verify_in.razorpay_order_id}",
             )
 
-        is_valid = self.razorpay.verify_payment_signature(
-            order_id=verify_in.razorpay_order_id,
-            payment_id=verify_in.razorpay_payment_id,
-            signature=verify_in.razorpay_signature,
-        )
+        # The SDK raises SignatureVerificationError on a bad signature rather
+        # than returning False.
+        try:
+            self.razorpay.utility.verify_payment_signature(
+                {
+                    "razorpay_order_id": verify_in.razorpay_order_id,
+                    "razorpay_payment_id": verify_in.razorpay_payment_id,
+                    "razorpay_signature": verify_in.razorpay_signature,
+                }
+            )
+            is_valid = True
+        except SignatureVerificationError:
+            is_valid = False
 
         if is_valid:
             # Don't downgrade a payment the webhook already finalized
@@ -156,7 +175,7 @@ class PaymentService:
     def handle_webhook(
             self,
             *,
-            payload_body: bytes,
+            payload_body: str,
             signature: str,
             webhook_secret: str,
             parsed_payload: dict,
@@ -167,12 +186,17 @@ class PaymentService:
             itself (confirm_booking/fail_booking already no-op on a booking
             that's not Pending) rather than a separate event-dedup table -
             Razorpay redeliveries are simply safe to reprocess.
+
+            payload_body must be the *raw* request body as sent by Razorpay
+            (not re-serialized JSON) since the signature is an HMAC over
+            those exact bytes.
             """
-            if not self.razorpay.verify_webhook_signature(
-                payload_body=payload_body,
-                signature=signature,
-                webhook_secret=webhook_secret,
-            ):
+            # Raises SignatureVerificationError (not a bool False) on mismatch.
+            try:
+                self.razorpay.utility.verify_webhook_signature(
+                    payload_body, signature, webhook_secret
+                )
+            except SignatureVerificationError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid webhook signature",

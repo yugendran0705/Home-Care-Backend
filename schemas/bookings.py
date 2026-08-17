@@ -72,16 +72,6 @@ class PendingBookingRequest(BaseModel):
 
 
 
-class PaymentCallbackRequest(BaseModel):
-    """
-    Schema for the payment-gateway callback/webhook that confirms or fails a
-    booking's payment. In production this would be validated against the
-    gateway's own webhook payload/signature rather than trusted as-is.
-    """
-    transaction_id: Optional[str] = None
-    payment_method: Optional[str] = None
-
-
 class BookingUpdate(BaseModel):
     """
     Schema for updating a booking. All fields are optional.
@@ -113,9 +103,15 @@ class BookingResponse(BookingBase):
         from_attributes = True
 
 class PendingBookingResponse(BaseModel):
-    """Response for a successfully created pending booking + its pending payment."""
+    """
+    Response for a successfully created pending booking + its pending payment.
+    payment.gateway_order_id is the Razorpay order id; combined with
+    razorpay_key_id, amount, and currency, the frontend has everything it
+    needs to open Razorpay Checkout.
+    """
     booking: BookingResponse
     payment: PaymentResponse
+    razorpay_key_id: str
 
     class Config:
         from_attributes = True

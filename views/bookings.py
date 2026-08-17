@@ -1,6 +1,5 @@
 # /views/bookings.py
 
-import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,7 +15,6 @@ from schemas.bookings import (
     PendingBookingRequest,
     PendingBookingResponse,
     BookingResponse,
-    PaymentCallbackRequest,
 )
 
 router = APIRouter(
@@ -26,6 +24,8 @@ router = APIRouter(
 
 patient_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient"]))
 nurse_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Nurse"]))
+user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient", "Nurse"]))
+admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 
 # Dependency to provide the SearchService
 def get_search_service(db: Session = Depends(get_db)) -> SearchService:
@@ -97,87 +97,47 @@ def create_booking(
         ) from exc
 
 
-@router.post(
-    "/{booking_id}/confirm-payment",
-    response_model=BookingResponse,
+@router.get(
+    "/all",
+    response_model=List[BookingResponse],
     status_code=status.HTTP_200_OK,
-    summary="Payment gateway webhook: mark payment successful and confirm the booking",
+    dependencies=[admin_dependency],
+    summary="Get all bookings (Admin Access)",
 )
-def confirm_booking_payment(
-    booking_id: uuid.UUID,
-    callback: PaymentCallbackRequest,
+def get_all_bookings(
+    skip: int = 0,
+    limit: int = 100,
     booking_service: BookingService = Depends(get_booking_service),
 ):
     """
-    Called by the payment gateway on successful payment. Not user-authenticated
-    by design (the gateway calls this, not a logged-in patient); production
-    must verify the gateway's webhook signature before trusting the payload.
+    Retrieves a paginated list of all bookings. Admin only.
     """
     try:
-        return booking_service.confirm_booking(
-            booking_id=booking_id,
-            transaction_id=callback.transaction_id,
-            payment_method=callback.payment_method,
-        )
+        return booking_service.list_all_bookings(skip=skip, limit=limit)
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to confirm booking payment.",
-        ) from exc
-
-
-@router.post(
-    "/{booking_id}/fail-payment",
-    response_model=BookingResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Payment gateway webhook: mark payment failed and cancel the booking",
-)
-def fail_booking_payment(
-    booking_id: uuid.UUID,
-    callback: PaymentCallbackRequest,
-    booking_service: BookingService = Depends(get_booking_service),
-):
-    """
-    Called by the payment gateway on failed payment. Not user-authenticated -
-    see confirm_booking_payment.
-    """
-    try:
-        return booking_service.fail_booking(
-            booking_id=booking_id,
-            transaction_id=callback.transaction_id,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fail booking payment.",
+            detail="Failed to retrieve bookings.",
         ) from exc
 
 
 @router.get(
-    "/patient/{patient_id}",
+    "/me",
     response_model=List[BookingResponse],
     status_code=status.HTTP_200_OK,
     summary="Get all bookings for a patient",
 )
 def get_bookings_for_patient(
-    patient_id: uuid.UUID,
-    current_user: models.User = patient_dependency,
+    current_user: models.User = user_dependency,
     booking_service: BookingService = Depends(get_booking_service),
 ):
     """
-    A Patient may only view their own bookings; Admin may view anyone's.
+    User can be either a patient or a nurse. Returns all bookings for the current user.
     """
-    if current_user.user_type == "Patient" and current_user.id != patient_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You may only view your own bookings.",
-        )
     try:
-        return booking_service.get_bookings_for_patient(patient_id=patient_id)
+        return booking_service.get_bookings_for_user(user_id=current_user.id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -186,32 +146,3 @@ def get_bookings_for_patient(
             detail="Failed to retrieve bookings for patient.",
         ) from exc
 
-
-@router.get(
-    "/nurse/{nurse_id}",
-    response_model=List[BookingResponse],
-    status_code=status.HTTP_200_OK,
-    summary="Get all bookings for a nurse",
-)
-def get_bookings_for_nurse(
-    nurse_id: uuid.UUID,
-    current_user: models.User = nurse_dependency,
-    booking_service: BookingService = Depends(get_booking_service),
-):
-    """
-    A Nurse may only view their own bookings; Admin may view anyone's.
-    """
-    if current_user.user_type == "Nurse" and current_user.id != nurse_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You may only view your own bookings.",
-        )
-    try:
-        return booking_service.get_bookings_for_nurse(nurse_id=nurse_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve bookings for nurse.",
-        ) from exc

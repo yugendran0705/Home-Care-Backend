@@ -60,30 +60,20 @@ class BookingRepository:
         """
         return self.db.get(models.Booking, booking_id)
 
-    def get_for_patient(self, *, patient_id: uuid.UUID) -> List[models.Booking]:
+    def get_for_user(self, *, user_id: uuid.UUID) -> List[models.Booking]:
         """
-        Retrieves all bookings made by a specific patient.
+        Retrieves all bookings where the given user is either the patient
+        or the nurse.
 
         Args:
-            patient_id (uuid.UUID): The patient's ID.
+            user_id (uuid.UUID): The user's ID (patient or nurse).
 
         Returns:
-            List[models.Booking]: A list of the patient's bookings.
+            List[models.Booking]: A list of the user's bookings.
         """
-        statement = select(models.Booking).where(models.Booking.patient_id == patient_id)
-        return self.db.execute(statement).scalars().all()
-
-    def get_for_nurse(self, *, nurse_id: uuid.UUID) -> List[models.Booking]:
-        """
-        Retrieves all bookings assigned to a specific nurse.
-
-        Args:
-            nurse_id (uuid.UUID): The nurse's ID.
-
-        Returns:
-            List[models.Booking]: A list of the nurse's bookings.
-        """
-        statement = select(models.Booking).where(models.Booking.nurse_id == nurse_id)
+        statement = select(models.Booking).where(
+            or_(models.Booking.patient_id == user_id, models.Booking.nurse_id == user_id)
+        )
         return self.db.execute(statement).scalars().all()
 
     def update(self, *, booking_id: uuid.UUID, updates: Dict[str, Any]) -> Optional[models.Booking]:

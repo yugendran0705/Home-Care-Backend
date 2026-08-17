@@ -81,7 +81,7 @@ def nurse_booking_lock(
 BOOKING_EXPIRY_ZSET = "booking:expiry"
 
 # How long an unpaid Pending booking is held before the sweeper cancels it.
-BOOKING_EXPIRY_SECONDS = 600  # 10 minutes
+BOOKING_EXPIRY_SECONDS = 300  # 5 minutes
 
 
 def schedule_booking_expiry(booking_id, fire_at_ts: float) -> bool:

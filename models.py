@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy import (
     Column, String, Boolean, Time, ForeignKey, Text, Integer, DateTime, Date, UUID, Numeric
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from geoalchemy2 import Geography
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
@@ -220,3 +221,21 @@ class BlackoutDate(Base):
 
     # Relationship back to the nurse
     nurse = relationship("Nurse", backref="blackout_dates")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column("notification_id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    type = Column(String(50), nullable=False, comment="e.g. booking_confirmed, policy_update")
+    title = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    data = Column(JSONB, nullable=False, default=dict)
+    audience_type = Column(String(10), nullable=False, comment="ENUM: global, role, user")
+    audience_role = Column(String(10), nullable=True, comment="ENUM: Patient, Nurse (only if audience_type=role)")
+    target_user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+
+    target_user = relationship("User", foreign_keys=[target_user_id])
+    creator = relationship("User", foreign_keys=[created_by])

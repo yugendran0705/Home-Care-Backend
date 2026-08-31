@@ -1,17 +1,24 @@
 # /views/notifications.py
 
+import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 import models
 from config.database import get_db
 from utils.roleChecker import RoleChecker
 from services.notifications import NotificationService
-from schemas.notifications import NotificationCreate, NotificationResponse, UnreadCountResponse
+from schemas.notifications import (
+    NotificationCreate,
+    NotificationResponse,
+    UnreadCountResponse,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Notifications"])
 
@@ -50,6 +57,7 @@ def create_notification(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
+        logger.exception("Failed to create notification")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create notification.",
@@ -64,16 +72,19 @@ def create_notification(
 )
 def get_notifications(
     unread: Optional[bool] = None,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=100),
     before: Optional[datetime] = None,
     current_user: models.User = user_dependency,
     service: NotificationService = Depends(get_notification_service),
 ):
     try:
-        return service.get_feed(user=current_user, unread=unread, limit=limit, before=before)
+        return service.get_feed(
+            user=current_user, unread=unread, limit=limit, before=before
+        )
     except HTTPException:
         raise
     except Exception as exc:
+        logger.exception("Failed to retrieve notifications")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve notifications.",
@@ -96,6 +107,7 @@ def mark_notification_read(
     except HTTPException:
         raise
     except Exception as exc:
+        logger.exception("Failed to mark notification as read")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to mark notification as read.",
@@ -113,10 +125,13 @@ def get_unread_count(
     service: NotificationService = Depends(get_notification_service),
 ):
     try:
-        return UnreadCountResponse(unread_count=service.get_unread_count(user_id=current_user.id))
+        return UnreadCountResponse(
+            unread_count=service.get_unread_count(user_id=current_user.id)
+        )
     except HTTPException:
         raise
     except Exception as exc:
+        logger.exception("Failed to retrieve unread count")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve unread count.",

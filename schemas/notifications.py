@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -15,8 +15,8 @@ class NotificationBase(BaseModel):
     title: str
     body: str
     data: dict = {}
-    audience_type: str = Field(..., examples=["global", "role", "user"])
-    audience_role: Optional[str] = Field(None, examples=["Patient", "Nurse"])
+    audience_type: Literal["global", "role", "user"]
+    audience_role: Optional[Literal["Patient", "Nurse"]] = None
     target_user_id: Optional[uuid.UUID] = None
 
     @model_validator(mode='after')

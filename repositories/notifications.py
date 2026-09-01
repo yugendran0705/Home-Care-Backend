@@ -77,12 +77,16 @@ class NotificationRepository:
         )
         statement = select(models.Notification).where(audience_filter)
 
-        if unread:
+        if unread is True:
             statement = statement.where(models.Notification.read_at.is_(None))
+        elif unread is False:
+            statement = statement.where(models.Notification.read_at.is_not(None))
         if before:
             statement = statement.where(models.Notification.created_at < before)
 
-        statement = statement.order_by(models.Notification.created_at.desc()).limit(limit)
+        statement = statement.order_by(models.Notification.created_at.desc()).limit(
+            limit
+        )
         return self.db.execute(statement).scalars().all()
 
     def count_unread_private(self, *, user_id: uuid.UUID) -> int:

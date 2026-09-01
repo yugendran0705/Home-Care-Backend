@@ -21,7 +21,7 @@ class NotificationService:
         type: str,
         title: str,
         body: str,
-        data: dict = {},
+        data: Optional[dict] = None,
         *,
         audience_type: str,
         audience_role: Optional[str] = None,
@@ -32,6 +32,8 @@ class NotificationService:
         Internal function called in-process by other services to create a
         notification. No event bus - direct call is sufficient at monolith scale.
         """
+        if data is None:
+            data = {}
         if audience_type == "role" and not audience_role:
             raise ValueError("audience_role is required when audience_type is 'role'")
         if audience_type == "user":

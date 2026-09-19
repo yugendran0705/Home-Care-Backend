@@ -3,7 +3,6 @@
 # adding in comments for personal notes
 import uuid
 import json #converting str to dicts and vice versa
-import logging #linking to central logging pipeline
 from typing import List, Optional, Dict
 
 from fastapi import HTTPException, status
@@ -11,10 +10,10 @@ from sqlalchemy.orm import Session
 
 from repositories.nursing_services import NursingServiceRepository
 import models
-from schemas.nursing_services import NursingServiceCreate, NursingServiceUpdate, NursingServiceResponse  
+from schemas.nursing_services import NursingServiceCreate, NursingServiceUpdate, NursingServiceResponse
 
 from utils.redis import get_cache, set_cache, delete_cache, SERVICE_CACHE_TTL
-logger = logging.getLogger(__name__) #logging
+from utils.logger import logger
 CACHE_KEY_PREFIX = "service_profile_" #service prefix string defn
 
 class NursingServiceService:
@@ -56,11 +55,12 @@ class NursingServiceService:
         try:
             new_service = self.service_repo.create(service_in=service_in)
             return new_service
-        except Exception as e:
+        except Exception:
             self.db.rollback()
+            logger.exception("Failed to create nursing service '%s'", service_in.service_name)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"An unexpected error occurred: {e}",
+                detail="An unexpected error occurred while creating the service.",
             )
 
     def get_service_by_id(self, *, service_id: uuid.UUID) -> NursingServiceResponse:

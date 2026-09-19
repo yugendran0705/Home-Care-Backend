@@ -1,16 +1,17 @@
 # services/reviews.py
 
 import uuid
-import logging
 from typing import List
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 
 import models
 from repositories.reviews import ReviewRepository
 from repositories.bookings import BookingRepository
 from schemas.reviews import ReviewCreate, ReviewResponse
+from utils.logger import logger
 
 
 class ReviewService:
@@ -85,14 +86,42 @@ class ReviewService:
 
         try:
             review = self.review_repo.create(review_in=review_in)
-        except Exception as e:
-            logger.error(f"Failed to create review for booking {booking_id}: {e}")
+            self._recompute_nurse_rating(nurse_id=booking.nurse_id)
+            self.db.commit()
+        except IntegrityError:
+            # The unique constraint on booking_id is the race-safe backstop for
+            # the check above: a concurrent create that slipped past it lands
+            # here, and it's the same "already reviewed" condition, not a 500.
+            self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A review already exists for this booking.",
+            )
+        except Exception:
+            self.db.rollback()
+            logger.exception("Failed to create review for booking %s", booking_id)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create review.",
             )
 
+        self.db.refresh(review)
         return ReviewResponse.model_validate(review)
+
+    def _recompute_nurse_rating(self, *, nurse_id: uuid.UUID) -> None:
+        """
+        Recomputes and writes the nurse's average_rating from all their
+        reviews. No commit - the caller commits this together with the review
+        write so the two never drift apart. Resets to 0 when no reviews remain.
+        """
+        # The session is autoflush=False, so flush any pending review change
+        # (e.g. an updated rating) before the aggregate query reads the DB -
+        # otherwise the AVG is computed against stale rows.
+        self.db.flush()
+        average = self.review_repo.average_rating_for_nurse(nurse_id=nurse_id)
+        nurse = self.db.get(models.Nurse, nurse_id)
+        if nurse is not None:
+            nurse.average_rating = round(average, 2) if average is not None else 0
 
     # ------------------------------------------------------------------
     # Read
@@ -115,10 +144,6 @@ class ReviewService:
             )
         return ReviewResponse.model_validate(review)
 
-    def get_reviews_for_nurse(self, *, nurse_id: uuid.UUID) -> List[ReviewResponse]:
-        reviews = self.review_repo.get_for_nurse(nurse_id=nurse_id)
-        return [ReviewResponse.model_validate(r) for r in reviews]
-
     def get_reviews_by_patient(self, *, patient_id: uuid.UUID) -> List[ReviewResponse]:
         reviews = self.review_repo.get_for_patient(patient_id=patient_id)
         return [ReviewResponse.model_validate(r) for r in reviews]
@@ -131,12 +156,14 @@ class ReviewService:
         *,
         review_id: uuid.UUID,
         patient_id: uuid.UUID,
-        rating: int | None = None,
-        comment: str | None = None,
+        updates: dict,
     ) -> ReviewResponse:
         """
-        Only the original reviewer can edit their review. rating/comment
-        are optional so a caller can update just one field.
+        Only the original reviewer can edit their review. `updates` carries
+        only the fields the client actually sent (the view builds it with
+        exclude_unset), so a caller can change just the rating, just the
+        comment, or explicitly clear the comment by sending it as null.
+        Rating bounds are already enforced by the request schema.
         """
         review = self.review_repo.get_by_id(review_id=review_id)
         if not review:
@@ -151,18 +178,27 @@ class ReviewService:
                 detail="You can only edit your own reviews.",
             )
 
-        if rating is not None:
-            if not (1 <= rating <= 5):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Rating must be between 1 and 5.",
-                )
-            review.rating = rating
+        # rating is NOT NULL, so a sent-but-null rating is ignored; comment is
+        # nullable, so sending it as null is an explicit clear.
+        rating_changed = updates.get("rating") is not None
+        if rating_changed:
+            review.rating = updates["rating"]
 
-        if comment is not None:
-            review.comment = comment
+        if "comment" in updates:
+            review.comment = updates["comment"]
 
-        self.db.commit()
+        try:
+            if rating_changed:
+                self._recompute_nurse_rating(nurse_id=review.nurse_id)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            logger.exception("Failed to update review %s", review_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update review.",
+            )
+
         self.db.refresh(review)
         return ReviewResponse.model_validate(review)
 
@@ -183,5 +219,20 @@ class ReviewService:
                 detail="You can only delete your own reviews.",
             )
 
-        deleted = self.review_repo.delete(review_id=review_id)
-        return ReviewResponse.model_validate(deleted)
+        # Snapshot before deletion - the ORM instance's attributes aren't
+        # safely readable once the row is gone and the transaction commits.
+        nurse_id = review.nurse_id
+        response = ReviewResponse.model_validate(review)
+        try:
+            self.review_repo.delete(review_id=review_id)
+            self._recompute_nurse_rating(nurse_id=nurse_id)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            logger.exception("Failed to delete review %s", review_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete review.",
+            )
+
+        return response

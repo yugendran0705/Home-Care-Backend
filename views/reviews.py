@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.reviews import ReviewService
 import models
-from schemas.reviews import ReviewCreate, ReviewResponse
+from schemas.reviews import ReviewCreateRequest, ReviewUpdateRequest, ReviewResponse
 
 router = APIRouter(
     prefix="/reviews",
@@ -24,7 +25,6 @@ def get_review_service(db=Depends(get_db)) -> ReviewService:
 # Role-based access dependencies
 patient_dependency = Depends(RoleChecker(allowed_roles=["Patient"]))
 user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient", "Nurse"]))
-admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 
 
 @router.post(
@@ -35,7 +35,7 @@ admin_dependency = Depends(RoleChecker(allowed_roles=["Admin"]))
 )
 def create_review(
     booking_id: uuid.UUID,
-    review_in: ReviewCreate,
+    review_in: ReviewCreateRequest,
     current_user: models.User = patient_dependency,
     service: ReviewService = Depends(get_review_service),
 ):
@@ -56,11 +56,11 @@ def create_review(
         raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        print(f"Unexpected error creating review for booking {booking_id}: {e}")
+    except Exception:
+        logger.exception("Unexpected error creating review for booking %s", booking_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred while creating the review.",
         )
 
 
@@ -80,8 +80,8 @@ def get_my_reviews(
         return service.get_reviews_by_patient(patient_id=current_user.id)
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"Error fetching reviews for user {current_user.id}: {e}")
+    except Exception:
+        logger.exception("Error fetching reviews for user %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching reviews.",
@@ -106,7 +106,7 @@ def get_review_by_id(
         review = service.get_review(review_id=review_id)
         is_owner = review.patient_id == current_user.id
         is_reviewed_nurse = review.nurse_id == current_user.id
-        is_admin = current_user.role == "Admin"
+        is_admin = current_user.user_type == "Admin"
         if not (is_owner or is_reviewed_nurse or is_admin):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -115,8 +115,8 @@ def get_review_by_id(
         return review
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"Error fetching review {review_id}: {e}")
+    except Exception:
+        logger.exception("Error fetching review %s", review_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching review.",
@@ -137,47 +137,22 @@ def get_review_by_booking(
         return service.get_review_by_booking(booking_id=booking_id)
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"Error fetching review for booking {booking_id}: {e}")
+    except Exception:
+        logger.exception("Error fetching review for booking %s", booking_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching review.",
         )
 
 
-@router.get(
-    "/nurses/{nurse_id}",
-    response_model=List[ReviewResponse],
-    summary="Get all reviews for a specific nurse (public-facing)",
-)
-def get_reviews_for_nurse(
-    nurse_id: uuid.UUID,
-    service: ReviewService = Depends(get_review_service),
-):
-    """
-    A nurse's reviews are public-facing (patients browsing nurses need to
-    see them), so no role restriction here - adjust if that's not
-    actually the intent.
-    """
-    try:
-        return service.get_reviews_for_nurse(nurse_id=nurse_id)
-    except Exception as e:
-        print(f"Error fetching reviews for nurse {nurse_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while fetching reviews.",
-        )
-
-
-@router.patch(
+@router.put(
     "/{review_id}",
     response_model=ReviewResponse,
     summary="Update the current user's review",
 )
 def update_review(
     review_id: uuid.UUID,
-    rating: int | None = None,
-    comment: str | None = None,
+    review_in: ReviewUpdateRequest,
     current_user: models.User = patient_dependency,
     service: ReviewService = Depends(get_review_service),
 ):
@@ -188,18 +163,17 @@ def update_review(
         return service.update_review(
             review_id=review_id,
             patient_id=current_user.id,
-            rating=rating,
-            comment=comment,
+            updates=review_in.model_dump(exclude_unset=True),
         )
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        print(f"Unexpected error updating review {review_id}: {e}")
+    except Exception:
+        logger.exception("Unexpected error updating review %s", review_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred while updating the review.",
         )
 
 
@@ -223,9 +197,9 @@ def delete_review(
         raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        print(f"Unexpected error deleting review: {e}")
+    except Exception:
+        logger.exception("Unexpected error deleting review %s", review_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred while deleting the review.",
         )

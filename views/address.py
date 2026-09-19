@@ -7,6 +7,7 @@ from typing import List
 # Import dependencies, services, models, and schemas
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.address import AddressService
 import models
 from schemas.address import AddressCreate, AddressUpdate, Address
@@ -46,13 +47,13 @@ def create_address_for_user(
             user_id=current_user.id
         )
     except ValueError as e:
-        print(f"Error creating address for user {current_user.id}: {e}")
+        logger.warning("Error creating address for user %s: %s", current_user.id, e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        print(f"An unexpected error occurred while creating address: {e}")
+    except Exception:
+        logger.exception("Unexpected error creating address for user %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred while creating the address."
         )
 
 
@@ -70,10 +71,10 @@ def get_my_addresses(
     """
     try:
         return service.get_addresses_for_user(user_id=current_user.id)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error fetching addresses for user {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error fetching addresses for user %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching addresses."
@@ -101,10 +102,10 @@ def get_address_by_id(
                 detail="Address not found or not authorized to view this address."
             )
         return db_address
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error fetching address {address_id} for user {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error fetching address %s for user %s", address_id, current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching address."
@@ -133,13 +134,13 @@ def update_address(
         )
         return updated_address
     except ValueError as e:
-        print(f"Error updating address {address_id} for user {current_user.id}: {e}")
+        logger.warning("Error updating address %s for user %s: %s", address_id, current_user.id, e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        print(f"An unexpected error occurred while updating address: {e}")
+    except Exception:
+        logger.exception("Unexpected error updating address %s for user %s", address_id, current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred while updating the address."
         )
 
 
@@ -161,13 +162,13 @@ def delete_address(
         service.delete_address(address_id=address_id, user_id=current_user.id)
         return None
     except ValueError as e:
-        print(f"Error deleting address: {e}")
+        logger.warning("Error deleting address %s for user %s: %s", address_id, current_user.id, e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+    except Exception:
+        logger.exception("Unexpected error deleting address %s for user %s", address_id, current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred while deleting the address."
         )
 
 
@@ -191,11 +192,11 @@ def set_primary_address(
         )
         return updated_address
     except ValueError as e:
-        print(f"Error setting primary address {address_id} for user {current_user.id}: {e}")
+        logger.warning("Error setting primary address %s for user %s: %s", address_id, current_user.id, e)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        print(f"An unexpected error occurred while setting primary address: {e}")
+    except Exception:
+        logger.exception("Unexpected error setting primary address %s for user %s", address_id, current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred while setting the primary address."
         )

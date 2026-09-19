@@ -6,6 +6,7 @@ from typing import List
 from config.database import get_db
 from config.razorpay import RAZORPAY_WEBHOOK_SECRET
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.payments import PaymentService
 import models
 from schemas.payments import (
@@ -123,11 +124,13 @@ def get_payment_details_by_id(
         if not payment:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
         return payment
-    except Exception as e:
-        print(f"Error fetching payment details for ID {payment_id}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve payment details")
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        logger.exception("Error fetching payment details for ID %s", payment_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve payment details")
     
 @router.get(
     "/booking/{booking_id}",
@@ -148,11 +151,13 @@ def get_payment_details_by_booking_id(
         if not payment:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
         return payment
-    except Exception as e:
-        print(f"Error fetching payment details for booking ID {booking_id}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve payment details")
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        logger.exception("Error fetching payment details for booking ID %s", booking_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve payment details")
     
 
 @router.get(
@@ -174,11 +179,13 @@ def get_payments_by_patient_id(
         if not payments:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No payments found for the specified patient")
         return payments
-    except Exception as e:
-        print(f"Error fetching payments for patient ID {current_user.id}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve payment details")
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        logger.exception("Error fetching payments for patient ID %s", current_user.id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve payment details")
     
 
 @router.put(
@@ -201,11 +208,13 @@ def update_payment_status(
         if not payment:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
         return payment
-    except Exception as e:
-        print(f"Error updating payment status for ID {payment_id}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update payment status")
+    except HTTPException:
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        logger.exception("Error updating payment status for ID %s", payment_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update payment status")
     
 
 @router.get(
@@ -224,8 +233,10 @@ def get_all_payments(
     """
     try:
         return service.list_all_payments(skip=skip, limit=limit)
-    except Exception as e:
-        print(f"Error fetching all payments: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error fetching all payments")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve payment details")
     
 @router.delete(
@@ -247,11 +258,13 @@ def delete_payment_record(
         if not payment:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
         return payment
-    except Exception as e:
-        print(f"Error deleting payment record for ID {payment_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete payment record")
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        logger.exception("Error deleting payment record for ID %s", payment_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete payment record")
 
     
 

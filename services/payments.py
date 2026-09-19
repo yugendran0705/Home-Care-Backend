@@ -1,7 +1,6 @@
 # services/payments.py
 
 import uuid
-import logging
 from typing import List
 
 from sqlalchemy.orm import Session
@@ -20,8 +19,7 @@ from schemas.payments import (
     PaymentVerifyResponse,
 )
 from config.razorpay import get_razorpay_client, RAZORPAY_WEBHOOK_SECRET
-
-logger = logging.getLogger(__name__)
+from utils.logger import logger
 
 
 class PaymentService:

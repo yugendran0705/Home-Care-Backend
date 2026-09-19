@@ -129,6 +129,11 @@ class Booking(Base):
     payment_status = Column(String(20), nullable=False, default='Pending', comment='ENUM: Pending, Paid, Refunded, Failed')
     booking_address_id = Column(UUID(as_uuid=True), ForeignKey("addresses.address_id"), nullable=False)
     notes = Column(Text, nullable=True) # Nullable
+    # Handover code the patient reads out to the nurse to close out the visit.
+    # Stored in plaintext because the patient has to be able to read it back at
+    # visit time, not just once at issue time.
+    completion_otp = Column(String(6), nullable=True)
+    completion_otp_attempts = Column(Integer, nullable=False, default=0)
 
     # Relationships
     patient = relationship("Patient", back_populates="bookings")

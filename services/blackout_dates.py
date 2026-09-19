@@ -8,10 +8,9 @@ import models
 from repositories.blackout_dates import BlackoutDateRepository
 from schemas.blackout_dates import BlackoutDateCreate, BlackoutDateUpdate
 
-import logging
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+from utils.logger import logger
 
 
 class BlackoutDateService:

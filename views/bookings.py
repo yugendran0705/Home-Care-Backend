@@ -1,5 +1,6 @@
 # /views/bookings.py
 
+import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,6 +16,8 @@ from schemas.bookings import (
     PendingBookingRequest,
     PendingBookingResponse,
     BookingResponse,
+    BookingCompletionOtpResponse,
+    CompleteBookingRequest,
 )
 
 router = APIRouter(
@@ -120,6 +123,103 @@ def get_all_bookings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve bookings.",
+        ) from exc
+
+
+@router.get(
+    "/{booking_id}/completion-otp",
+    response_model=BookingCompletionOtpResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get the handover code for a booking (Patient only)",
+)
+def get_completion_otp(
+    booking_id: uuid.UUID,
+    current_user: models.User = Depends(RoleChecker(allowed_roles=["Patient"])),
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    """
+    Returns the code the patient reads out to the nurse once the visit is
+    done. Restricted to the patient who owns the booking - deliberately not
+    exposed on any other booking response, since the nurse must learn it from
+    the patient rather than from the API.
+    """
+    try:
+        booking = booking_service.get_completion_otp(
+            booking_id=booking_id, patient_id=current_user.id
+        )
+        return BookingCompletionOtpResponse(
+            booking_id=booking.id, completion_otp=booking.completion_otp
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve the completion code.",
+        ) from exc
+
+
+@router.post(
+    "/{booking_id}/completion-otp/regenerate",
+    response_model=BookingCompletionOtpResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Issue a fresh handover code for a booking (Patient only)",
+)
+def regenerate_completion_otp(
+    booking_id: uuid.UUID,
+    current_user: models.User = Depends(RoleChecker(allowed_roles=["Patient"])),
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    """
+    Issues a new code and clears the attempt lockout. Use this when the nurse
+    has exhausted their tries on the previous code; a plain GET of the code
+    deliberately does not reset the lockout.
+    """
+    try:
+        booking = booking_service.regenerate_completion_otp(
+            booking_id=booking_id, patient_id=current_user.id
+        )
+        return BookingCompletionOtpResponse(
+            booking_id=booking.id, completion_otp=booking.completion_otp
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to regenerate the completion code.",
+        ) from exc
+
+
+@router.post(
+    "/{booking_id}/complete",
+    response_model=BookingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Complete a booking with the patient's handover code (Nurse only)",
+)
+def complete_booking(
+    booking_id: uuid.UUID,
+    complete_request: CompleteBookingRequest,
+    current_user: models.User = Depends(RoleChecker(allowed_roles=["Nurse"])),
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    """
+    Marks the nurse's own booking Completed once they supply the code the
+    patient gave them at the end of the visit. Each shift of a multi-day
+    booking is completed on its own.
+    """
+    try:
+        return booking_service.complete_booking(
+            booking_id=booking_id,
+            nurse_id=current_user.id,
+            otp=complete_request.otp,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to complete booking.",
         ) from exc
 
 

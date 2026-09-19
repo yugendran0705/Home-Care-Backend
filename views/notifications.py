@@ -1,6 +1,5 @@
 # /views/notifications.py
 
-import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -11,14 +10,13 @@ from sqlalchemy.orm import Session
 import models
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.notifications import NotificationService
 from schemas.notifications import (
     NotificationCreate,
     NotificationResponse,
     UnreadCountResponse,
 )
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Notifications"])
 

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 # Import dependencies, services, models, and schemas
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.nurse_associated_services import NurseAssociatedServiceService
 import models
 from schemas.nurse_associated_services import (
@@ -51,12 +52,13 @@ async def assign_service_to_nurse(
             nurse_service_in=service_in
         )
         return bulk_response
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in nurse associated services endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred."
         )
 
 
@@ -76,12 +78,13 @@ async def get_nurse_services(
     try:
         nurse_services = service.get_services_for_nurse(nurse_id=nurse_id)
         return nurse_services
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in nurse associated services endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred."
         )
 
 
@@ -106,12 +109,13 @@ async def update_nurse_services(
             service_ids=service_in.service_ids,
         )
         return NurseAssociatedServicesResponse.model_validate(updated_association)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in nurse associated services endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred."
         )
 
 
@@ -134,11 +138,12 @@ async def remove_service_from_nurse(
             nurse_id=nurse_id
         )
         return {"detail": "Successfully removed all services from nurse."}
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in nurse associated services endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}"
+            detail="An unexpected error occurred."
         )
         

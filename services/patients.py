@@ -3,7 +3,6 @@
 import uuid
 from typing import Optional, Dict, Any
 import json
-import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -17,8 +16,7 @@ from schemas.address import AddressCreate
 from schemas.patients import PatientResponse
 from config.security import create_access_token, create_refresh_token
 from utils.redis import get_cache, set_cache, delete_cache, PATIENT_CACHE_TTL
-
-logger = logging.getLogger(__name__)
+from utils.logger import logger
 
 
 class PatientService:
@@ -118,12 +116,13 @@ class PatientService:
             # This catches the "Email already registered" error from UserService
             self.db.rollback()
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-        except Exception as e:
+        except Exception:
             # Rollback in case of any other error during patient/address creation
             self.db.rollback()
+            logger.exception("Failed to create patient/user account")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"An unexpected error occurred: {e}",
+                detail="An unexpected error occurred while creating the account.",
             )
 
     def get_patient_profile(self, patient_id: uuid.UUID) -> PatientResponse:

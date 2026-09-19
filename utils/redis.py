@@ -4,9 +4,7 @@ from contextlib import contextmanager
 from redis.exceptions import LockError
 
 from config.redis import get_redis_connection
-import logging
-
-logger = logging.getLogger(__name__)
+from utils.logger import logger
 
 # Default TTL for patient cache entries (15 minutes)
 PATIENT_CACHE_TTL = 900

@@ -18,14 +18,13 @@ import uuid
 
 from config.database import SessionLocal
 from services.bookings import BookingService
+from utils.logger import logger
 from utils.redis import (
     cancel_booking_expiry,
     get_due_booking_expiries,
     peek_next_booking_expiry,
     schedule_booking_expiry,
 )
-
-logger = logging.getLogger(__name__)
 
 # Upper bound on how long we ever sleep in one go, so the worker still wakes
 # periodically even if Redis was briefly unavailable when we last peeked.

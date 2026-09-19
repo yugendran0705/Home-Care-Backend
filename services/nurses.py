@@ -24,9 +24,7 @@ from schemas.nurse_associated_services import NurseAssociatedServicesResponse
 from schemas.nursing_services import NursingServiceResponse
 from config.security import create_access_token, create_refresh_token
 
-import logging
-logger = logging.getLogger(__name__)
-
+from utils.logger import logger
 from utils.redis import get_cache, set_cache, delete_cache, NURSE_CACHE_TTL
 
 
@@ -155,12 +153,15 @@ class NurseService:
                 services=[NursingServiceResponse.model_validate(self.service_repo.get_by_id(service_id=sid)) for sid in service_ids] if service_ids else []
             )
 
-        
-        except Exception as e:
+        except HTTPException:
             self.db.rollback()
+            raise
+        except Exception:
+            self.db.rollback()
+            logger.exception("Failed to create nurse/user account")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"An unexpected error occurred during registration: {e}",
+                detail="An unexpected error occurred during registration.",
             )
 
     def upload_document_for_nurse(

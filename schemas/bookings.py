@@ -72,6 +72,26 @@ class PendingBookingRequest(BaseModel):
 
 
 
+class BookingCompletionOtpResponse(BaseModel):
+    """
+    The handover code for a single visit. Only ever returned to the patient
+    who owns the booking - the nurse learns it from the patient in person.
+    """
+    booking_id: uuid.UUID
+    completion_otp: str
+
+
+class CompleteBookingRequest(BaseModel):
+    """
+    The code the nurse collects from the patient at the end of the visit.
+    """
+    otp: str = Field(
+        ...,
+        pattern=r"^\d{6}$",
+        description="The 6-digit code shown in the patient's app for this booking.",
+    )
+
+
 class BookingUpdate(BaseModel):
     """
     Schema for updating a booking. All fields are optional.

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 # Import dependencies, services, models, and schemas
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.patients import PatientService
 import models
 from schemas.patients import *
@@ -47,14 +48,14 @@ def register_new_patient(
             address_data=address_data_dict
         )
         return created_patient
-    except HTTPException as e:
+    except HTTPException:
         # Assuming service layer raises HTTPException for known errors
-        raise e
-    except Exception as e:
-        print(f"An unexpected error occurred during patient registration: {e}")
+        raise
+    except Exception:
+        logger.exception("Unexpected error during patient registration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during registration: {str(e)}"
+            detail="An unexpected error occurred during registration."
         )
 
 
@@ -72,10 +73,10 @@ def get_my_profile(
         if not patient_profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient profile not found.")
         return patient_profile
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error fetching profile for patient {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error fetching profile for patient %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching profile."
@@ -98,10 +99,10 @@ def update_my_profile(
             raise HTTPException(status_code=400, detail="No update data provided.")
 
         return service.update_patient_profile(patient_id=current_user.id, updates=update_dict)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error updating profile for patient {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error updating profile for patient %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while updating profile."
@@ -118,8 +119,8 @@ def get_all_patients(
     """
     try:
         return service.get_all_patients()
-    except Exception as e:
-        print(f"Error fetching all patients: {e}")
+    except Exception:
+        logger.exception("Error fetching all patients")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching all patients."
@@ -137,10 +138,10 @@ def deactivate_my_account(
     try:
         service.deactivate_patient_account(patient_id=current_user.id)
         return None
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error deactivating account for patient {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error deactivating account for patient %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while deactivating account."
@@ -166,10 +167,10 @@ def get_patient_by_id_as_admin(
         if not patient_profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
         return patient_profile
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error fetching patient profile for ID {patient_id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error fetching patient profile for ID %s", patient_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching patient profile."

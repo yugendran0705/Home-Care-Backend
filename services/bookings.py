@@ -1,14 +1,14 @@
 # services/bookings.py
-import logging
+import secrets
 import time as time_module
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
+from utils.logger import logger
 
 import models
 from repositories.bookings import BookingRepository
@@ -41,6 +41,10 @@ class BookingService:
     # radius_meters a client passed to /search - a nurse_id obtained any other
     # way must still fall within this distance of the patient's primary address.
     MAX_BOOKING_DISTANCE_METERS = 8000
+
+    # Wrong-code budget before a booking's handover code has to be reissued,
+    # so a 6-digit code can't be walked through by a nurse who never showed up.
+    MAX_OTP_ATTEMPTS = 5
 
     def __init__(self, db: Session, razorpay_client=None):
         self.db = db
@@ -524,6 +528,171 @@ class BookingService:
         cancel_booking_expiry(booking.id)  # remove timer if still present
         self.db.refresh(booking)
         return booking
+
+    # ------------------------------------------------------------------
+    # Visit handover: the patient reads a code, the nurse redeems it
+    # ------------------------------------------------------------------
+    def get_completion_otp(
+        self, *, booking_id: uuid.UUID, patient_id: uuid.UUID
+    ) -> models.Booking:
+        """
+        Returns the booking's handover code, issuing one only on the first read
+        (when none exists yet).
+
+        This read never resets the attempt counter or mints a fresh code for an
+        existing one - otherwise a patient screen that auto-refreshes would keep
+        lifting the MAX_OTP_ATTEMPTS lockout and hand the nurse unlimited fresh
+        try-windows. Recovering from a lockout is a deliberate action, handled
+        by regenerate_completion_otp.
+
+        Issued lazily here rather than at confirmation time because a
+        Daily_Shift's shifts are confirmed by a bulk cascade that never loads
+        the individual rows - and because bookings confirmed before this flow
+        existed still need a code.
+        """
+        try:
+            booking = self._get_visit_for_update(booking_id)
+            if booking.patient_id != patient_id:
+                # Deliberately the same answer as a missing booking, so this
+                # can't be used to probe which booking ids exist.
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found."
+                )
+            self._assert_completable(booking)
+
+            issued = booking.completion_otp is None
+            if issued:
+                booking.completion_otp = f"{secrets.randbelow(1_000_000):06d}"
+                booking.completion_otp_attempts = 0
+                self.db.commit()
+            else:
+                # Pure read - drop the row lock without writing.
+                self.db.rollback()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        if issued:
+            self.db.refresh(booking)
+        return booking
+
+    def regenerate_completion_otp(
+        self, *, booking_id: uuid.UUID, patient_id: uuid.UUID
+    ) -> models.Booking:
+        """
+        Mints a fresh handover code and clears the attempt counter. This is the
+        deliberate, patient-initiated way to recover after the nurse has burned
+        the attempt budget on the previous code - a wrong code never changes the
+        stored code, so the visit is only ever blocked, never lost.
+        """
+        try:
+            booking = self._get_visit_for_update(booking_id)
+            if booking.patient_id != patient_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found."
+                )
+            self._assert_completable(booking)
+
+            booking.completion_otp = f"{secrets.randbelow(1_000_000):06d}"
+            booking.completion_otp_attempts = 0
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        self.db.refresh(booking)
+        return booking
+
+    def complete_booking(
+        self, *, booking_id: uuid.UUID, nurse_id: uuid.UUID, otp: str
+    ) -> models.Booking:
+        """
+        Closes out a visit once the nurse supplies the code the patient read to
+        them. This is the only path that produces a Completed booking.
+        """
+        try:
+            booking = self._get_visit_for_update(booking_id)
+            if booking.nurse_id != nurse_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found."
+                )
+
+            if booking.booking_status == "Completed":
+                self.db.rollback()
+                return booking  # idempotent: a retried request isn't an error
+
+            self._assert_completable(booking)
+
+            if booking.scheduled_start_time > datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This visit has not started yet and cannot be completed.",
+                )
+
+            if booking.completion_otp is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="No completion code has been issued for this booking. "
+                           "Ask the patient to open the booking in their app.",
+                )
+
+            if booking.completion_otp_attempts >= self.MAX_OTP_ATTEMPTS:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many incorrect codes. Ask the patient to re-open the "
+                           "booking in their app for a fresh code.",
+                )
+
+            otp_matched = secrets.compare_digest(booking.completion_otp, otp)
+            if otp_matched:
+                booking.booking_status = "Completed"
+                booking.completion_otp = None  # single use
+                booking.completion_otp_attempts = 0
+            else:
+                booking.completion_otp_attempts += 1
+
+            # One commit either way - a wrong code still has to persist its
+            # attempt, so the rejection below is raised after the write lands.
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        if not otp_matched:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Incorrect completion code.",
+            )
+
+        self.db.refresh(booking)
+        return booking
+
+    def _get_visit_for_update(self, booking_id: uuid.UUID) -> models.Booking:
+        """Row-locks the booking, rejecting ids that don't exist."""
+        booking = self.booking_repo.get_for_update(booking_id=booking_id)
+        if not booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found."
+            )
+        return booking
+
+    def _assert_completable(self, booking: models.Booking) -> None:
+        """
+        A visit is closed out on the row that actually holds a time slot - a
+        standalone Continuous booking, or one shift of a Daily_Shift parent.
+        """
+        if booking.is_parent_booking:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This booking is a multi-shift wrapper; each shift is "
+                       "completed on its own.",
+            )
+        if booking.booking_status != "Confirmed":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Booking is '{booking.booking_status}'; a handover code "
+                       "applies only while a booking is Confirmed.",
+            )
 
     # ------------------------------------------------------------------
     # Read-only lookups

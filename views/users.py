@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.users import UserService
 import models
 from schemas.token import Token, RefreshTokenRequest
@@ -46,15 +47,14 @@ def register_new_user(
             user_type=user_in.user_type
         )
         return created_user
-    except HTTPException as e:
-        print(f"HTTP Error in user registration: {e.detail}")
-        raise e
-    except Exception as e:
-        print(f"Unexpected Error in user registration: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in user registration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during registration."
-        )   
+            detail="An unexpected error occurred during registration."
+        )
 
 @router.post(
     "/login",
@@ -82,11 +82,10 @@ def login_user(
             )
         
         return Token(access_token= response["access_token"], refresh_token= response["refresh_token"])
-    except HTTPException as e:
-        print(f"HTTP Error during login: {e.detail}")
-        raise e
-    except Exception as e:
-        print(f"Unexpected Error during login: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error during login")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during login."
@@ -111,14 +110,14 @@ def refresh_token(
         )
         return Token(access_token=new_tokens["access_token"], refresh_token=new_tokens["refresh_token"])
     except ValueError as e:
-        print(f"Value Error during token refresh: {e}")
+        logger.warning("Value error during token refresh: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except Exception as e:
-        print(f"Unexpected Error during token refresh: {e}")
+    except Exception:
+        logger.exception("Unexpected error during token refresh")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while refreshing the token."
@@ -135,11 +134,10 @@ def get_my_profile(
     """
     try:
         return service.get_user_by_id(user.id)
-    except HTTPException as e:
-        print(f"HTTP Error getting own profile: {e.detail}")
-        raise e
-    except Exception as e:
-        print(f"Unexpected Error getting own profile: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error getting own profile")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching your profile."
@@ -166,11 +164,10 @@ def get_user_by_id_as_admin(
                 detail="User not found"
             )
         return user
-    except HTTPException as e:
-        print(f"HTTP Error getting user by ID: {e.detail}")
-        raise e
-    except Exception as e:
-        print(f"Unexpected Error getting user by ID: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error getting user by ID %s", user_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching the user profile."
@@ -192,11 +189,10 @@ def update_my_profile(
         
         updated_user = service.update_user_profile(user.id, update_dict)
         return updated_user
-    except HTTPException as e:
-        print(f"HTTP Error updating own profile: {e.detail}")
-        raise e
-    except Exception as e:
-        print(f"Unexpected Error updating own profile: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error updating own profile")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while updating your profile."
@@ -213,11 +209,10 @@ def deactivate_my_account(
     try:
         service.deactivate_user(user.id)
         return None
-    except HTTPException as e:
-        print(f"HTTP Error deactivating account: {e.detail}")
-        raise e
-    except Exception as e:
-        print(f"Unexpected Error deactivating account: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error deactivating account")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during account deactivation."

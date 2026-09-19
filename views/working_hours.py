@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.working_hours import WorkingHoursService
 import models
 from schemas.working_hours import (
@@ -49,9 +50,10 @@ def create_working_hours_for_nurse(
             nurse_id=current_user.id,
             working_hours_in=working_hours_in,
         )
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
     except Exception:
+        logger.exception("Unexpected error creating working hours")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred.",
@@ -81,12 +83,13 @@ def bulk_create_working_hours_for_nurse(
             nurse=current_user.nurse,
             working_hours=created_working_hours,
         )
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in working hours endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred.",
         )
 
 
@@ -107,12 +110,13 @@ def get_working_hours_by_id(
     """
     try:
         return service.get_working_hours_by_id(working_hours_id=working_hours_id)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in working hours endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred.",
         )
 
 
@@ -141,12 +145,13 @@ def get_working_hours_for_nurse(
             nurse=nurse,
             working_hours=working_hours,
         )
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in working hours endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred.",
         )
 
 
@@ -178,12 +183,13 @@ def update_working_hours(
             working_hours_id=working_hours_id,
             updates=working_hours_update,
         )
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in working hours endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred.",
         )
 
 
@@ -211,10 +217,11 @@ def delete_working_hours(
 
         service.delete_working_hours(working_hours_id=working_hours_id)
         return {"detail": "Working hours deleted successfully."}
-    except HTTPException as e:
-        raise e
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in working hours endpoint")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="An unexpected error occurred.",
         )

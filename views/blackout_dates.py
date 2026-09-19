@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 
 from services.blackout_dates import BlackoutDateService
 
@@ -47,9 +48,8 @@ def create_blackout_date(
     except HTTPException:
         raise
 
-    except Exception as e:
-        print(f"Error creating blackout date: {e}")
-
+    except Exception:
+        logger.exception("Error creating blackout date")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred.",
@@ -71,9 +71,8 @@ def get_my_blackout_dates(
     except HTTPException:
         raise
 
-    except Exception as e:
-        print(f"Error fetching blackout dates: {e}")
-
+    except Exception:
+        logger.exception("Error fetching blackout dates")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred.",
@@ -100,9 +99,8 @@ def get_blackout_date(
     except HTTPException:
         raise
 
-    except Exception as e:
-        print(f"Error fetching blackout date: {e}")
-
+    except Exception:
+        logger.exception("Error fetching blackout date")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred.",
@@ -131,9 +129,8 @@ def update_blackout_date(
     except HTTPException:
         raise
 
-    except Exception as e:
-        print(f"Error updating blackout date: {e}")
-
+    except Exception:
+        logger.exception("Error updating blackout date")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred.",
@@ -161,9 +158,8 @@ def delete_blackout_date(
     except HTTPException:
         raise
 
-    except Exception as e:
-        print(f"Error deleting blackout date: {e}")
-
+    except Exception:
+        logger.exception("Error deleting blackout date")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred.",

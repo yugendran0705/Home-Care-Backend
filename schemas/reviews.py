@@ -20,9 +20,30 @@ class ReviewBase(BaseModel):
 
 class ReviewCreate(ReviewBase):
     """
-    Schema used for creating a new review.
+    Full review payload assembled server-side before persistence. patient_id
+    and nurse_id are filled in from the authenticated user and the booking, not
+    from the client - see ReviewCreateRequest for what the client actually sends.
     """
     pass
+
+
+class ReviewCreateRequest(BaseModel):
+    """
+    The request body for creating a review. booking_id is taken from the URL,
+    patient_id from the auth token, and nurse_id from the booking - so the
+    client only supplies the rating and an optional comment.
+    """
+    rating: int = Field(..., ge=1, le=5, description="Rating from 1 to 5")
+    comment: Optional[str] = Field(None, description="An optional text comment for the review.")
+
+
+class ReviewUpdateRequest(BaseModel):
+    """
+    The request body for updating a review. Both fields are optional so the
+    client can update just the rating, just the comment, or both.
+    """
+    rating: Optional[int] = Field(None, ge=1, le=5, description="Rating from 1 to 5")
+    comment: Optional[str] = Field(None, description="An optional text comment for the review.")
 
 
 class ReviewResponse(ReviewBase):

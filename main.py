@@ -1,10 +1,20 @@
+import logging
+
 from fastapi import FastAPI
 from dotenv import load_dotenv
 import models as model
 from config.database import engine
+from utils.logger import logger
 
-from views import nurse_associated_services, patients, users, address, nurses, nursing_services, payments, working_hours, blackout_dates, bookings, notifications
+from views import nurse_associated_services, patients, users, address, nurses, nursing_services, payments, working_hours, blackout_dates, bookings, reviews, notifications
 from fastapi.middleware.cors import CORSMiddleware
+
+# Configure the application-wide logger once, at startup. Every module logs
+# through utils.logger.logger, which propagates to this root configuration.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 app = FastAPI(
     title="Home Care Backend API",
@@ -30,6 +40,7 @@ app.add_middleware(
 )
 
 model.Base.metadata.create_all(bind=engine)
+logger.info("Home Care Backend starting up.")
 
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(patients.router, prefix="/api/v1")
@@ -41,6 +52,7 @@ app.include_router(working_hours.router, prefix="/api/v1")
 app.include_router(blackout_dates.router, prefix="/api/v1")
 app.include_router(payments.router, prefix="/api/v1")
 app.include_router(bookings.router, prefix="/api/v1")
+app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 
 @app.get("/")

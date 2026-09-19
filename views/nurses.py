@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 # Import dependencies, services, models, and schemas
 from config.database import get_db
 from utils.roleChecker import RoleChecker
+from utils.logger import logger
 from services.nurses import NurseService
 import models
 from schemas.nurses import *
@@ -52,14 +53,13 @@ async def register_new_nurse(
         
         return created_nurse
     
-    except HTTPException as e:
-        print(f"An unexpected error occurred during nurse registration: {e}")
-        raise e
-    except Exception as e:
-        print(f"An unexpected error occurred during nurse registration: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error during nurse registration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during registration: {str(e)}"
+            detail="An unexpected error occurred during registration."
         )
 
 @router.post(
@@ -93,10 +93,10 @@ def upload_nurse_document(
             document_type=document_type,
             file=file
         )
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error uploading document for nurse {nurse_id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error uploading document for nurse %s", nurse_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during document upload."
@@ -119,10 +119,10 @@ def get_my_profile(
         if not nurse_profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nurse profile not found.")
         return nurse_profile
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error fetching profile for nurse {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error fetching profile for nurse %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching profile."
@@ -147,10 +147,10 @@ def update_my_profile(
             raise HTTPException(status_code=400, detail="No update data provided.")
 
         return service.update_nurse_profile(nurse_id=current_user.id, updates=update_dict)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error updating profile for nurse {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error updating profile for nurse %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while updating profile."
@@ -171,8 +171,8 @@ def get_all_nurses(
     try:
         # Assumes a 'list_all' method exists in your NurseRepository
         return service.nurse_repo.list_all()
-    except Exception as e:
-        print(f"Error fetching all nurses: {e}")
+    except Exception:
+        logger.exception("Error fetching all nurses")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching all nurses."
@@ -190,10 +190,10 @@ def deactivate_my_account(
     try:
         service.deactivate_nurse_account(nurse_id=current_user.id)
         return None
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error deactivating account for nurse {current_user.id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error deactivating account for nurse %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while deactivating account."
@@ -219,10 +219,10 @@ def get_nurse_by_id_as_admin(
         if not nurse_profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nurse not found.")
         return nurse_profile
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print(f"Error fetching nurse profile for ID {nurse_id}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error fetching nurse profile for ID %s", nurse_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while fetching nurse profile."
@@ -245,11 +245,10 @@ def verify_nurse_account(
     try:
         verified_nurse = service.verify_nurse_account(nurse_id=nurse_id)
         return verified_nurse
-    except HTTPException as e:
-        print("Error verifying nurse account:", e)
-        raise e
-    except Exception as e:
-        print("Unexpected error verifying nurse account:", e)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error verifying nurse account %s", nurse_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while verifying nurse account."

@@ -24,7 +24,9 @@ def get_review_service(db=Depends(get_db)) -> ReviewService:
 
 # Role-based access dependencies
 patient_dependency = Depends(RoleChecker(allowed_roles=["Patient"]))
-user_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient", "Nurse"]))
+# Reviews are readable by the booking's own patient and nurse, and by Admins;
+# the per-booking ownership check lives in ReviewService.
+review_reader_dependency = Depends(RoleChecker(allowed_roles=["Admin", "Patient", "Nurse"]))
 
 
 @router.post(
@@ -91,11 +93,11 @@ def get_my_reviews(
 @router.get(
     "/one/{review_id}",
     response_model=ReviewResponse,
-    summary="Get a specific review by ID (owner-restricted)",
+    summary="Get a specific review by ID (author, reviewed nurse, or Admin)",
 )
 def get_review_by_id(
     review_id: uuid.UUID,
-    current_user: models.User = user_dependency,
+    current_user: models.User = review_reader_dependency,
     service: ReviewService = Depends(get_review_service),
 ):
     """
@@ -103,16 +105,11 @@ def get_review_by_id(
     nurse, or an Admin.
     """
     try:
-        review = service.get_review(review_id=review_id)
-        is_owner = review.patient_id == current_user.id
-        is_reviewed_nurse = review.nurse_id == current_user.id
-        is_admin = current_user.user_type == "Admin"
-        if not (is_owner or is_reviewed_nurse or is_admin):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Review not found or not authorized to view this review.",
-            )
-        return review
+        return service.get_review(
+            review_id=review_id,
+            user_id=current_user.id,
+            is_admin=current_user.user_type == "Admin",
+        )
     except HTTPException:
         raise
     except Exception:
@@ -126,15 +123,23 @@ def get_review_by_id(
 @router.get(
     "/bookings/{booking_id}",
     response_model=ReviewResponse,
-    summary="Get the review for a specific booking",
+    summary="Get the review for a specific booking (its patient, nurse, or Admin)",
 )
 def get_review_by_booking(
     booking_id: uuid.UUID,
-    current_user: models.User = user_dependency,
+    current_user: models.User = review_reader_dependency,
     service: ReviewService = Depends(get_review_service),
 ):
+    """
+    Retrieves a booking's review, restricted to that booking's patient,
+    nurse, or an Admin.
+    """
     try:
-        return service.get_review_by_booking(booking_id=booking_id)
+        return service.get_review_by_booking(
+            booking_id=booking_id,
+            user_id=current_user.id,
+            is_admin=current_user.user_type == "Admin",
+        )
     except HTTPException:
         raise
     except Exception:

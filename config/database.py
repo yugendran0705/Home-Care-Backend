@@ -3,7 +3,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = "postgresql://yugendran:password@localhost:5432/homecare"
+from config.env import require_env
+
+# e.g. postgresql://user:password@host:5432/homecare - never hardcode it here.
+DATABASE_URL = require_env("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
 

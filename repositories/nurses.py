@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, time
 
 # Adjust the import path based on your project structure
 import models
+from utils.scheduling import compute_required_segments
 
 
 class NurseRepository:
@@ -245,40 +246,6 @@ class NurseRepository:
             def _time_only(dt: datetime):
                 return dt.timetz() if dt.tzinfo else dt.time()
 
-            def _time_min(dt: datetime):
-                t = time.min
-                return t.replace(tzinfo=dt.tzinfo) if dt.tzinfo else t
-
-            def _time_max(dt: datetime):
-                t = time(23, 59, 59)
-                return t.replace(tzinfo=dt.tzinfo) if dt.tzinfo else t
-
-            def _split_shift_into_daily_segments(
-                shift_start: datetime, shift_end: datetime
-            ):
-                segments = []
-                current = shift_start
-                while current < shift_end:
-                    next_day_start = datetime.combine(
-                        current.date() + timedelta(days=1),
-                        _time_min(current),
-                    )
-                    segment_end = min(shift_end, next_day_start)
-                    segment_end_time = (
-                        _time_max(current)
-                        if segment_end == next_day_start
-                        else _time_only(segment_end)
-                    )
-                    segments.append(
-                        (
-                            current.weekday(),
-                            _time_only(current),
-                            segment_end_time,
-                        )
-                    )
-                    current = segment_end
-                return segments
-
             shift_windows = []
             current_date = start_date
 
@@ -333,12 +300,9 @@ class NurseRepository:
                 ~models.Nurse.id.in_(select(overlapping_bookings.c.nurse_id)),
             )
 
-            required_segments = []
-            for shift_start, shift_end in shift_windows:
-                required_segments.extend(
-                    _split_shift_into_daily_segments(shift_start, shift_end)
-                )
-            required_segments = sorted(set(required_segments))
+            # Same IST wall-clock segments BookingService checks at booking
+            # time, so search never offers a nurse the booking would reject.
+            required_segments = compute_required_segments(shift_windows)
 
             segment_requirements = [
                 self.db.query(models.WorkingHours)

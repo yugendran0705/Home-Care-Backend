@@ -5,6 +5,8 @@ from typing import Optional
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from schemas.nurses import NursePublicResponse
+from utils.scheduling import to_local_wall_time
+
 class WorkingHoursBase(BaseModel):
     """Base schema for working-hours data.
     """
@@ -13,6 +15,13 @@ class WorkingHoursBase(BaseModel):
     start_time: time = Field(..., description="Start time for the working slot")
     end_time: time = Field(..., description="End time for the working slot")
     
+
+    # Declared before the end-after-start check so that check compares the
+    # already-normalized local times.
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def normalize_to_local_time(cls, v: time) -> time:
+        return to_local_wall_time(v)
 
     @field_validator('end_time')
     @classmethod
@@ -41,6 +50,11 @@ class WorkingHoursUpdate(BaseModel):
     start_time: Optional[time] = None
     end_time: Optional[time] = None
     is_active: Optional[bool] = None
+
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def normalize_to_local_time(cls, v: Optional[time]) -> Optional[time]:
+        return to_local_wall_time(v) if v is not None else v
 
 
 

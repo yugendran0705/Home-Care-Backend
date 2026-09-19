@@ -204,8 +204,11 @@ class WorkingHours(Base):
     # 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
     day_of_week = Column(Integer, nullable=False) 
     
-    start_time = Column(Time(timezone=True), nullable=False)
-    end_time = Column(Time(timezone=True), nullable=False)
+    # Local (IST) wall-clock times with no offset - see utils/scheduling.APP_TZ.
+    # A stored offset made Postgres shift these before comparing, so a slot
+    # saved as UTC silently moved by 5h30.
+    start_time = Column(Time(timezone=False), nullable=False)
+    end_time = Column(Time(timezone=False), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
 
     # Relationship back to the nurse

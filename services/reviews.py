@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 import models
 from repositories.reviews import ReviewRepository
 from repositories.bookings import BookingRepository
+from services.notifications import NotificationService
 from schemas.reviews import ReviewCreate, ReviewResponse
 from utils.logger import logger
 
@@ -26,6 +27,7 @@ class ReviewService:
         self.db = db
         self.review_repo = ReviewRepository(db)
         self.booking_repo = BookingRepository(db)
+        self.notification_service = NotificationService(db)
 
     # ------------------------------------------------------------------
     # Create
@@ -56,6 +58,15 @@ class ReviewService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only review your own bookings.",
+            )
+
+        # A Daily_Shift parent is a billing wrapper; each shift is its own
+        # visit and is reviewed on its own (the parent can still be Completed
+        # once all its shifts are).
+        if booking.is_parent_booking:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This booking is a multi-shift wrapper; review each shift on its own.",
             )
 
         # Only allow reviewing a booking that actually happened.
@@ -106,7 +117,10 @@ class ReviewService:
             )
 
         self.db.refresh(review)
-        return ReviewResponse.model_validate(review)
+        response = ReviewResponse.model_validate(review)
+        # After the commit and snapshot: best-effort, can't affect the review.
+        self.notification_service.review_received(review, booking)
+        return response
 
     def _recompute_nurse_rating(self, *, nurse_id: uuid.UUID) -> None:
         """
@@ -126,16 +140,33 @@ class ReviewService:
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
-    def get_review(self, *, review_id: uuid.UUID) -> ReviewResponse:
+    # A review is visible only to the patient who wrote it, the nurse it's
+    # about, and Admins. Anyone else gets the same 404 as a missing review, so
+    # these endpoints can't be used to probe which bookings/reviews exist.
+    def get_review(
+        self, *, review_id: uuid.UUID, user_id: uuid.UUID, is_admin: bool = False
+    ) -> ReviewResponse:
         review = self.review_repo.get_by_id(review_id=review_id)
-        if not review:
+        if not review or not (
+            is_admin or user_id in (review.patient_id, review.nurse_id)
+        ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Review not found.",
             )
         return ReviewResponse.model_validate(review)
 
-    def get_review_by_booking(self, *, booking_id: uuid.UUID) -> ReviewResponse:
+    def get_review_by_booking(
+        self, *, booking_id: uuid.UUID, user_id: uuid.UUID, is_admin: bool = False
+    ) -> ReviewResponse:
+        booking = self.booking_repo.get_by_id(booking_id=booking_id)
+        if not booking or not (
+            is_admin or user_id in (booking.patient_id, booking.nurse_id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No review found for this booking.",
+            )
         review = self.review_repo.get_by_booking_id(booking_id=booking_id)
         if not review:
             raise HTTPException(

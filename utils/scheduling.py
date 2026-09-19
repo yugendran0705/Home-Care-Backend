@@ -27,6 +27,19 @@ def to_local_naive(dt: datetime, tz: ZoneInfo = APP_TZ) -> datetime:
     return ensure_aware(dt, tz).astimezone(tz).replace(tzinfo=None)
 
 
+def to_local_wall_time(t: time, tz: ZoneInfo = APP_TZ) -> time:
+    """
+    Working-hours input -> naive local wall-clock time. Naive input is taken
+    as already local; an offset-bearing time (e.g. "08:52:00Z" from a JS
+    toISOString) is converted to the same instant in `tz`.
+    """
+    if t.tzinfo is None:
+        return t
+    # Any fixed date works for the conversion; the offset is what matters.
+    anchored = datetime.combine(datetime(2000, 1, 1).date(), t)
+    return anchored.astimezone(tz).time().replace(tzinfo=None)
+
+
 def compute_service_windows(
     service, scheduled_start_time: datetime, tz: ZoneInfo = APP_TZ
 ) -> List[Tuple[datetime, datetime]]:

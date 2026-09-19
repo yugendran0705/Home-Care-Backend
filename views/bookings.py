@@ -18,6 +18,7 @@ from schemas.bookings import (
     BookingResponse,
     BookingCompletionOtpResponse,
     CompleteBookingRequest,
+    CancellationQuoteResponse,
 )
 
 router = APIRouter(
@@ -188,6 +189,63 @@ def regenerate_completion_otp(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to regenerate the completion code.",
+        ) from exc
+
+
+@router.get(
+    "/{booking_id}/cancellation",
+    response_model=CancellationQuoteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Preview what cancelling a booking would refund (Patient only)",
+)
+def get_cancellation_quote(
+    booking_id: uuid.UUID,
+    current_user: models.User = Depends(RoleChecker(allowed_roles=["Patient"])),
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    """
+    Read-only: which visits a cancel would close and the refund it would
+    issue right now, so the app can show it before the patient confirms.
+    """
+    try:
+        return booking_service.get_cancellation_quote(
+            booking_id=booking_id, patient_id=current_user.id
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to prepare the cancellation.",
+        ) from exc
+
+
+@router.post(
+    "/{booking_id}/cancel",
+    response_model=BookingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel a booking and refund per the cancellation policy (Patient only)",
+)
+def cancel_booking(
+    booking_id: uuid.UUID,
+    current_user: models.User = Depends(RoleChecker(allowed_roles=["Patient"])),
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    """
+    Cancels the patient's own booking. Unpaid bookings are simply cancelled;
+    paid ones cancel every visit that hasn't started and refund each in full
+    (12+ hours' notice) or 50% (less), via Razorpay.
+    """
+    try:
+        return booking_service.cancel_booking(
+            booking_id=booking_id, patient_id=current_user.id
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel booking.",
         ) from exc
 
 

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, func
 
 import models
 from schemas.bookings import BookingCreate
@@ -190,12 +190,53 @@ class BookingRepository:
         return conflict is not None
 
     def get_for_update(self, *, booking_id: uuid.UUID) -> Optional[models.Booking]:
-        """Row-locks the booking (SELECT ... FOR UPDATE) for atomic status transitions."""
+        """Row-locks the booking (SELECT ... FOR UPDATE) for atomic status transitions.
+
+        populate_existing: if this session already loaded the row (e.g. an
+        unlocked ownership check), the ORM would otherwise hand back that cached
+        object with its pre-lock values, and every check made "under the lock"
+        would be against stale state."""
         return (
             self.db.query(models.Booking)
             .filter(models.Booking.id == booking_id)
             .with_for_update()
+            .populate_existing()
             .one_or_none()
+        )
+
+    def get_parent_id(self, *, booking_id: uuid.UUID) -> Optional[uuid.UUID]:
+        """Plain (unlocked) read of a booking's parent_booking_id, so callers
+        can lock parent-before-child like every other status transition."""
+        return self.db.execute(
+            select(models.Booking.parent_booking_id).where(models.Booking.id == booking_id)
+        ).scalar_one_or_none()
+
+    def get_children_for_update(
+        self, *, parent_booking_id: uuid.UUID
+    ) -> List[models.Booking]:
+        """Row-locks every shift of a Daily_Shift parent, earliest first. Call
+        only after locking the parent (parent-before-child lock order)."""
+        return (
+            self.db.query(models.Booking)
+            .filter(models.Booking.parent_booking_id == parent_booking_id)
+            .order_by(models.Booking.scheduled_start_time)
+            .with_for_update()
+            .populate_existing()  # see get_for_update
+            .all()
+        )
+
+    def count_children_not_in(
+        self, *, parent_booking_id: uuid.UUID, statuses: tuple
+    ) -> int:
+        """Counts a parent's shifts whose booking_status is NOT one of `statuses`.
+        Reflects unflushed changes only if the caller has flushed."""
+        return (
+            self.db.query(func.count(models.Booking.id))
+            .filter(
+                models.Booking.parent_booking_id == parent_booking_id,
+                models.Booking.booking_status.notin_(statuses),
+            )
+            .scalar()
         )
 
     def set_status(

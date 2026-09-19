@@ -2,8 +2,10 @@
 import secrets
 import time as time_module
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import List
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from typing import Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -18,6 +20,8 @@ from repositories.payments import PaymentRepository
 from repositories.blackout_dates import BlackoutDateRepository
 from repositories.working_hours import WorkingHoursRepository
 from repositories.address import AddressRepository
+from services.notifications import NotificationService
+from schemas.bookings import CancellationQuoteResponse
 from config.razorpay import get_razorpay_client
 from utils.scheduling import compute_service_windows, compute_required_segments
 from utils.redis import (
@@ -55,6 +59,7 @@ class BookingService:
         self.blackout_repo = BlackoutDateRepository(db)
         self.working_hours_repo = WorkingHoursRepository(db)
         self.address_repo = AddressRepository(db)
+        self.notification_service = NotificationService(db)
         # Lazy: built on first access (see `razorpay` property) rather than
         # here, so call sites that never touch payments (e.g. the expiry
         # sweeper, which only calls cancel_if_still_pending) don't crash on
@@ -419,6 +424,9 @@ class BookingService:
 
         cancel_booking_expiry(booking.id)  # slot confirmed; drop the timer
         self.db.refresh(booking)
+        # Only reached on a real Pending -> Confirmed transition; the idempotent
+        # webhook-redelivery path returned above, so no duplicate notification.
+        self.notification_service.booking_confirmed(booking)
         return booking
 
     # ------------------------------------------------------------------
@@ -451,6 +459,12 @@ class BookingService:
                 return booking
 
             payment = self.payment_repo.get_by_booking_id(booking_id=booking.id)
+            # Razorpay fires payment.failed per declined attempt; tell the
+            # patient only on the first one (payment not already Failed), not
+            # on every retry against the same order.
+            first_failure = payment is not None and payment.payment_status not in (
+                "Success", "Refunded", "Failed"
+            )
             if payment and payment.payment_status not in ("Success", "Refunded"):
                 self.payment_repo.set_status(
                     payment=payment,
@@ -466,6 +480,8 @@ class BookingService:
             raise
 
         self.db.refresh(booking)
+        if first_failure:
+            self.notification_service.payment_failed(booking)
         return booking
 
     def cancel_if_still_pending(self, booking_id: uuid.UUID):
@@ -477,13 +493,21 @@ class BookingService:
         webhook-vs-timer race (the webhook won) - a silent no-op, not an error.
         Already-Cancelled is likewise a harmless idempotent no-op.
         """
-        return self._cancel_if_pending(booking_id, silent_if_missing=True)
+        return self._cancel_if_pending(
+            booking_id,
+            silent_if_missing=True,
+            cancel_reason="payment wasn't completed in time",
+        )
 
     def _cancel_if_pending(
         self,
         booking_id: uuid.UUID,
         transaction_id: str = None,
         silent_if_missing: bool = False,
+        # None (the default) sends no notification - e.g. create_booking's
+        # cleanup after a gateway/Redis failure, where the patient already got
+        # an error and never had a booking to pay for.
+        cancel_reason: Optional[str] = None,
     ):
         try:
             try:
@@ -527,7 +551,262 @@ class BookingService:
 
         cancel_booking_expiry(booking.id)  # remove timer if still present
         self.db.refresh(booking)
+        # Only reached on a real Pending -> Cancelled transition (already-
+        # terminal bookings returned above).
+        if cancel_reason is not None:
+            self.notification_service.booking_cancelled(booking, reason=cancel_reason)
         return booking
+
+    # ------------------------------------------------------------------
+    # Patient cancellation + refund policy
+    # ------------------------------------------------------------------
+    # A visit cancelled at least this long before it starts is refunded in
+    # full; closer to the start it gets LATE_CANCELLATION_REFUND_RATIO. A visit
+    # that has already started can't be cancelled.
+    FULL_REFUND_NOTICE = timedelta(hours=12)
+    LATE_CANCELLATION_REFUND_RATIO = Decimal("0.50")
+    CANCELLATION_POLICY = (
+        "Full refund for visits cancelled 12+ hours before they start, 50% "
+        "within 12 hours. Visits that have started can't be cancelled."
+    )
+
+    @dataclass
+    class _CancellationPlan:
+        visits: List[models.Booking] = field(default_factory=list)
+        refunds: Dict[uuid.UUID, Decimal] = field(default_factory=dict)
+        # Visits refunded at the full rate (12+ hours' notice).
+        full_refund_ids: set = field(default_factory=set)
+        blocked_reason: Optional[str] = None
+
+        @property
+        def refund_total(self) -> Decimal:
+            return sum(self.refunds.values(), Decimal("0.00"))
+
+    def _plan_cancellation(
+        self,
+        holder: models.Booking,
+        visits: List[models.Booking],
+        payment: Optional[models.Payment],
+        now: datetime,
+    ) -> "BookingService._CancellationPlan":
+        """
+        Pure policy: which visits a cancel would close and what each refunds.
+        Shared by the quote and the cancel itself so they can never disagree.
+        `visits` is every time slot the booking holds - the booking itself
+        for Continuous, every shift for a Daily_Shift parent.
+        """
+        plan = self._CancellationPlan()
+
+        if holder.booking_status == "Pending":
+            plan.visits = list(visits)  # nothing was paid, nothing to refund
+            return plan
+        if holder.booking_status != "Confirmed":
+            plan.blocked_reason = f"This booking is already {holder.booking_status.lower()}."
+            return plan
+
+        upcoming = [
+            v for v in visits
+            if v.booking_status == "Confirmed" and v.scheduled_start_time > now
+        ]
+        if not upcoming:
+            plan.blocked_reason = (
+                "This visit has already started, so it can't be cancelled."
+                if len(visits) == 1
+                else "There are no upcoming visits left to cancel."
+            )
+            return plan
+        if payment is None or payment.payment_status not in ("Success", "Refunded"):
+            plan.blocked_reason = "This booking's payment can't be refunded automatically."
+            return plan
+
+        # The price covers every slot equally, so each visit is worth an equal
+        # share - with the rounding remainder on the last one, so the shares
+        # always add up to exactly the amount paid (₹100 / 3 = 33.33, 33.33,
+        # 33.34), and a full cancel refunds every paisa. Refunds never exceed
+        # what's still unrefunded on the payment.
+        amount = Decimal(payment.amount)
+        share = (amount / len(visits)).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        value = {v.id: share for v in visits}
+        value[visits[-1].id] = amount - share * (len(visits) - 1)
+
+        remaining = amount - Decimal(payment.refunded_amount or 0)
+        for visit in upcoming:
+            full = visit.scheduled_start_time - now >= self.FULL_REFUND_NOTICE
+            ratio = Decimal("1") if full else self.LATE_CANCELLATION_REFUND_RATIO
+            if full:
+                plan.full_refund_ids.add(visit.id)
+            refund = min(
+                (value[visit.id] * ratio).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                remaining,
+            )
+            remaining -= refund
+            plan.refunds[visit.id] = refund
+        plan.visits = upcoming
+        return plan
+
+    def _load_for_cancellation(self, holder: models.Booking, *, lock: bool):
+        visits = (
+            (
+                self.booking_repo.get_children_for_update(parent_booking_id=holder.id)
+                if lock
+                else sorted(holder.child_bookings, key=lambda b: b.scheduled_start_time)
+            )
+            if holder.is_parent_booking
+            else [holder]
+        )
+        payment = self.payment_repo.get_by_booking_id(booking_id=holder.id)
+        return visits, payment
+
+    def get_cancellation_quote(
+        self, *, booking_id: uuid.UUID, patient_id: uuid.UUID
+    ) -> CancellationQuoteResponse:
+        holder = self.booking_repo.get_by_id(booking_id=booking_id)
+        if not holder or holder.patient_id != patient_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+        if holder.parent_booking_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cancel the whole booking (its parent_booking_id), not a single shift.",
+            )
+
+        visits, payment = self._load_for_cancellation(holder, lock=False)
+        plan = self._plan_cancellation(holder, visits, payment, datetime.now(timezone.utc))
+        return CancellationQuoteResponse(
+            booking_id=holder.id,
+            cancellable=plan.blocked_reason is None,
+            reason=plan.blocked_reason,
+            visits_to_cancel=len(plan.visits),
+            full_refund_visits=len(plan.full_refund_ids),
+            partial_refund_visits=len(plan.refunds) - len(plan.full_refund_ids),
+            refund_amount=plan.refund_total,
+            currency=payment.currency if payment else "INR",
+            policy=self.CANCELLATION_POLICY,
+        )
+
+    def cancel_booking(
+        self, *, booking_id: uuid.UUID, patient_id: uuid.UUID
+    ) -> models.Booking:
+        """
+        Patient-initiated cancel of a whole booking (a Continuous booking or a
+        Daily_Shift parent). Unpaid bookings are simply cancelled. Paid ones
+        cancel every visit that hasn't started yet and refund per the policy
+        above; completed and in-progress shifts are left untouched.
+
+        The Razorpay refund is requested BEFORE anything is written: if the
+        gateway refuses, the booking is left exactly as it was and the patient
+        can retry. (The rare reverse - refund issued, then our commit fails -
+        is logged loudly with the refund id for manual reconciliation.)
+        """
+        holder = self.booking_repo.get_by_id(booking_id=booking_id)
+        if not holder or holder.patient_id != patient_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+
+        if holder.booking_status == "Pending":
+            booking = self._cancel_if_pending(holder.id)
+            if booking.booking_status != "Cancelled":
+                # Payment landed between our read and the lock.
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This booking was just confirmed. Refresh and try again.",
+                )
+            self.notification_service.booking_cancelled_by_patient(
+                booking, cancelled_visits=1, refund_amount=Decimal("0"), was_paid=False
+            )
+            return booking
+
+        refund_id = None
+        try:
+            holder = self._get_payment_holder_for_update(booking_id)  # parent before shifts
+            visits, payment = self._load_for_cancellation(holder, lock=True)
+            plan = self._plan_cancellation(holder, visits, payment, datetime.now(timezone.utc))
+            if plan.blocked_reason:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=plan.blocked_reason)
+
+            refund_total = plan.refund_total
+            if refund_total > 0:
+                refund_id = self._issue_refund(payment, refund_total, holder)
+
+            for visit in plan.visits:
+                visit.booking_status = "Cancelled"
+                # "Refunded" means fully refunded; a late (partial) refund
+                # leaves it "Paid" - the exact figure is on the Payment row.
+                visit.payment_status = (
+                    "Refunded" if visit.id in plan.full_refund_ids else "Paid"
+                )
+                visit.completion_otp = None
+                visit.completion_otp_attempts = 0
+
+            if refund_total > 0:
+                payment.refunded_amount = Decimal(payment.refunded_amount or 0) + refund_total
+                payment.refund_id = refund_id
+                if payment.refunded_amount >= Decimal(payment.amount):
+                    payment.payment_status = "Refunded"
+
+            if holder.is_parent_booking:
+                # Close the wrapper once no shift is left open: Completed if
+                # any shift actually happened, otherwise Cancelled. An
+                # in-progress shift keeps it open until the nurse completes it.
+                self.db.flush()
+                open_shifts = self.booking_repo.count_children_not_in(
+                    parent_booking_id=holder.id, statuses=self._CLOSED_SHIFT_STATUSES
+                )
+                if open_shifts == 0:
+                    holder.booking_status = (
+                        "Completed"
+                        if any(v.booking_status == "Completed" for v in visits)
+                        else "Cancelled"
+                    )
+                holder.payment_status = (
+                    "Refunded" if payment.payment_status == "Refunded" else "Paid"
+                )
+
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            if refund_id is not None:
+                logger.critical(
+                    "Refund %s issued for booking %s but the cancellation failed to "
+                    "save - reconcile manually.", refund_id, booking_id,
+                )
+            raise
+
+        self.db.refresh(holder)
+        self.notification_service.booking_cancelled_by_patient(
+            holder, cancelled_visits=len(plan.visits), refund_amount=refund_total
+        )
+        self.notification_service.visits_cancelled_for_nurse(
+            holder, cancelled_visits=plan.visits
+        )
+        return holder
+
+    def _issue_refund(
+        self, payment: models.Payment, amount: Decimal, booking: models.Booking
+    ) -> str:
+        """Asks Razorpay to refund `amount` against the captured payment and
+        returns the refund id. Raises 502 (no state changed) if it refuses."""
+        if not payment.transaction_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This booking's payment can't be refunded automatically.",
+            )
+        try:
+            refund = self.razorpay.payment.refund(
+                payment.transaction_id,
+                {
+                    "amount": int((amount * 100).to_integral_value(rounding=ROUND_HALF_UP)),
+                    "notes": {"booking_id": str(booking.id), "reason": "patient_cancellation"},
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Razorpay refund failed for payment %s (booking %s)", payment.id, booking.id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="We couldn't process the refund right now, so the booking "
+                       "wasn't cancelled. Please try again shortly.",
+            )
+        return refund["id"]
 
     # ------------------------------------------------------------------
     # Visit handover: the patient reads a code, the nurse redeems it
@@ -609,8 +888,20 @@ class BookingService:
         """
         Closes out a visit once the nurse supplies the code the patient read to
         them. This is the only path that produces a Completed booking.
+
+        For a Daily_Shift shift, the parent wrapper is rolled up to Completed
+        in the same transaction once no shift is left open.
         """
         try:
+            # Lock parent before child - the same order confirm/cancel use when
+            # cascading - so two shifts completing at once serialize on the
+            # parent (neither can miss the other's update) and can't deadlock.
+            parent_id = self.booking_repo.get_parent_id(booking_id=booking_id)
+            parent = (
+                self.booking_repo.get_for_update(booking_id=parent_id)
+                if parent_id is not None
+                else None
+            )
             booking = self._get_visit_for_update(booking_id)
             if booking.nurse_id != nurse_id:
                 raise HTTPException(
@@ -648,6 +939,8 @@ class BookingService:
                 booking.booking_status = "Completed"
                 booking.completion_otp = None  # single use
                 booking.completion_otp_attempts = 0
+                if parent is not None:
+                    self._roll_up_parent(parent)
             else:
                 booking.completion_otp_attempts += 1
 
@@ -665,7 +958,28 @@ class BookingService:
             )
 
         self.db.refresh(booking)
+        # The already-Completed retry path returned early, so this fires once
+        # per visit - for a Daily_Shift, once per shift.
+        self.notification_service.visit_completed(booking)
         return booking
+
+    # Shift statuses that no longer need a visit. A shift in any other state
+    # (Pending/Confirmed) keeps its parent open.
+    _CLOSED_SHIFT_STATUSES = ("Completed", "Cancelled", "Rejected")
+
+    def _roll_up_parent(self, parent: models.Booking) -> None:
+        """
+        Marks a row-locked Daily_Shift parent Completed once every one of its
+        shifts is closed. No commit - runs inside complete_booking's transaction.
+        """
+        if parent.booking_status != "Confirmed":
+            return
+        self.db.flush()  # autoflush is off; the count must see this shift's update
+        open_shifts = self.booking_repo.count_children_not_in(
+            parent_booking_id=parent.id, statuses=self._CLOSED_SHIFT_STATUSES
+        )
+        if open_shifts == 0:
+            parent.booking_status = "Completed"
 
     def _get_visit_for_update(self, booking_id: uuid.UUID) -> models.Booking:
         """Row-locks the booking, rejecting ids that don't exist."""

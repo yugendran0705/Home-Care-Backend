@@ -92,6 +92,22 @@ class CompleteBookingRequest(BaseModel):
     )
 
 
+class CancellationQuoteResponse(BaseModel):
+    """
+    What cancelling a booking right now would do, shown to the patient before
+    they confirm. Computed by the same code path that performs the cancel.
+    """
+    booking_id: uuid.UUID
+    cancellable: bool
+    reason: Optional[str] = Field(None, description="Why it can't be cancelled, when cancellable is false.")
+    visits_to_cancel: int = 0
+    full_refund_visits: int = 0
+    partial_refund_visits: int = 0
+    refund_amount: Decimal = Decimal("0.00")
+    currency: str = "INR"
+    policy: str
+
+
 class BookingUpdate(BaseModel):
     """
     Schema for updating a booking. All fields are optional.
